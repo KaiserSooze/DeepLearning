@@ -6,12 +6,17 @@ from tensorflow.python.framework import ops
 ops.reset_default_graph()
 import pandas as pd
   
-%matplotlib inline
+
+print("Test")
+#matplotlib inline
 from tqdm import tqdm
 import os
-root ="C:\\Users\\nadhola\\Desktop\\data"
+root ="C:\\Users\sanatara\\DeepLearning\\Scripts\\WeldingInspection\\TimeSeries\\data"
 allfiles =[]
 pandaframes=[]
+numClasses = 2
+numInputDataColumns = 4
+
 with tqdm(total=136) as pbar:
     for root, dirs, files in os.walk(root):
         data = [os.path.join(root,f) for f in files if f.endswith(".txt")]
@@ -29,13 +34,7 @@ with tqdm(total=136) as pbar:
 pbar.close()
 
 print("All done importing")
-        #print(pandaframes)
 
-
-    #parsedmetadata[line[0]] = line[1][:-1]
-    
-    
-#np.random.seed(7)
 tf.set_random_seed(7)
 sess = tf.Session()
 
@@ -47,17 +46,21 @@ result.classification= pd.factorize(result.classification)[0]
 
 result.drop(['P-Refplus','Plasma','Error','P-Ref-','T-Refplus','T-Ref-','T-Raw','R-Refplus','R-Refplus','Refl','R-Ref-','IDMplus','IDM','IDM-','L-Raw','LP-Raw','LPplus','Power','LP-','classification'],axis=1).to_numpy()
 
-x_vals = np.array([[x[0:4]] for x in result.drop('classification', axis=1).to_numpy()])
-x_vals = x_vals.reshape((x_vals.shape[0],4))
-y_vals1 = np.array([1 if y==0 else -1 for y in result.classification.as_matrix()])
-y_vals2 = np.array([1 if y==1 else -1 for y in result.classification.as_matrix()])
-y_vals3 = np.array([1 if y==2 else -1 for y in result.classification.as_matrix()])
-y_vals4 = np.array([1 if y==3 else -1 for y in result.classification.as_matrix()])
-y_vals5 = np.array([1 if y==4 else -1 for y in result.classification.as_matrix()])
-y_vals6 = np.array([1 if y==5 else -1 for y in result.classification.as_matrix()])
-y_vals7 = np.array([1 if y==6 else -1 for y in result.classification.as_matrix()])
-y_vals8 = np.array([1 if y==7 else -1 for y in result.classification.as_matrix()])
-y_vals = np.array([y_vals1, y_vals2, y_vals3,y_vals4, y_vals5, y_vals6,y_vals7, y_vals8])
+x_vals = np.array([[x[0:numInputDataColumns]] for x in result.drop('classification', axis=1).to_numpy()])
+x_vals = x_vals.reshape((x_vals.shape[0],numInputDataColumns))
+y_vals1 = np.array([1 if y==0 else -1 for y in result.classification.values])
+y_vals2 = np.array([1 if y==1 else -1 for y in result.classification.values])
+
+batch_size = 10
+#y_vals3 = np.array([1 if y==2 else -1 for y in result.classification.as_matrix()])
+#y_vals4 = np.array([1 if y==3 else -1 for y in result.classification.as_matrix()])
+#y_vals5 = np.array([1 if y==4 else -1 for y in result.classification.as_matrix()])
+#y_vals6 = np.array([1 if y==5 else -1 for y in result.classification.as_matrix()])
+#y_vals7 = np.array([1 if y==6 else -1 for y in result.classification.as_matrix()])
+#y_vals8 = np.array([1 if y==7 else -1 for y in result.classification.as_matrix()])
+#y_vals = np.array([y_vals1, y_vals2, y_vals3,y_vals4, y_vals5, y_vals6,y_vals7, y_vals8])
+
+y_vals = np.array([y_vals1, y_vals2])
 class1_x = [x[0] for i,x in enumerate(x_vals) if
 result.classification[i]==0]
 class1_y = [x[1] for i,x in enumerate(x_vals) if
@@ -66,40 +69,42 @@ class2_x = [x[0] for i,x in enumerate(x_vals) if
 result.classification[i]==1]
 class2_y = [x[1] for i,x in enumerate(x_vals) if
 result.classification[i]==1]
-class3_x = [x[0] for i,x in enumerate(x_vals) if
-result.classification[i]==2]
-class3_y = [x[1] for i,x in enumerate(x_vals) if
-result.classification[i]==2]
-class4_x = [x[0] for i,x in enumerate(x_vals) if
-result.classification[i]==3]
-class4_y = [x[1] for i,x in enumerate(x_vals) if
-result.classification[i]==3]
-class5_x = [x[0] for i,x in enumerate(x_vals) if
-result.classification[i]==4]
-class5_y = [x[1] for i,x in enumerate(x_vals) if
-result.classification[i]==4]
-class6_x = [x[0] for i,x in enumerate(x_vals) if
-result.classification[i]==5]
-class6_y = [x[1] for i,x in enumerate(x_vals) if
-result.classification[i]==5]
-class7_x = [x[0] for i,x in enumerate(x_vals) if
-result.classification[i]==6]
-class7_y = [x[1] for i,x in enumerate(x_vals) if
-result.classification[i]==6]
-class8_x = [x[0] for i,x in enumerate(x_vals) if
-result.classification[i]==7]
-class8_y = [x[1] for i,x in enumerate(x_vals) if
-result.classification[i]==7]
+#class3_x = [x[0] for i,x in enumerate(x_vals) if
+#result.classification[i]==2]
+#class3_y = [x[1] for i,x in enumerate(x_vals) if
+#result.classification[i]==2]
+#class4_x = [x[0] for i,x in enumerate(x_vals) if
+#result.classification[i]==3]
+#class4_y = [x[1] for i,x in enumerate(x_vals) if
+#result.classification[i]==3]
+#class5_x = [x[0] for i,x in enumerate(x_vals) if
+#result.classification[i]==4]
+#class5_y = [x[1] for i,x in enumerate(x_vals) if
+#result.classification[i]==4]
+#class6_x = [x[0] for i,x in enumerate(x_vals) if
+#result.classification[i]==5]
+#class6_y = [x[1] for i,x in enumerate(x_vals) if
+#result.classification[i]==5]
+#class7_x = [x[0] for i,x in enumerate(x_vals) if
+#result.classification[i]==6]
+#class7_y = [x[1] for i,x in enumerate(x_vals) if
+#result.classification[i]==6]
+#class8_x = [x[0] for i,x in enumerate(x_vals) if
+#result.classification[i]==7]
+#class8_y = [x[1] for i,x in enumerate(x_vals) if
+#result.classification[i]==7]
+#
+## Initialize placeholders
+x_data = tf.placeholder(shape=[None, numInputDataColumns], dtype=tf.float32)
+y_target = tf.placeholder(shape=[numClasses, None], dtype=tf.float32)
+prediction_grid = tf.placeholder(shape=[None, numInputDataColumns], dtype=tf.float32)
+#
+## Create variables for svm
+b = tf.Variable(tf.random_normal(shape=[numClasses,batch_size]))
 
-# Initialize placeholders
-x_data = tf.placeholder(shape=[None, 4], dtype=tf.float32)
-y_target = tf.placeholder(shape=[8, None], dtype=tf.float32)
-prediction_grid = tf.placeholder(shape=[None, 4], dtype=tf.float32)
-
-# Create variables for svm
-b = tf.Variable(tf.random_normal(shape=[8,batch_size]))
-
-# Gaussian (RBF) kernel
+print("Variables for SVM initialised")
+#
+## Gaussian (RBF) kernel
 gamma = tf.constant(-10.0)
 dist = tf.reduce_sum(tf.square(x_data), 1)
 dist = tf.reshape(dist, [-1,1])
@@ -109,8 +114,9 @@ my_kernel = tf.exp(tf.multiply(gamma, tf.abs(sq_dists)))
 # Declare function to do reshape/batch multiplication
 def reshape_matmul(mat, _size):
     v1 = tf.expand_dims(mat, 1)
-    v2 = tf.reshape(v1, [8, _size, 1])
+    v2 = tf.reshape(v1, [numClasses, _size, 1])
     return(tf.matmul(v2, v1))
+    
 # Compute SVM Model
 first_term = tf.reduce_sum(b)
 b_vec_cross = tf.matmul(tf.transpose(b), b)
@@ -132,6 +138,7 @@ accuracy = tf.reduce_mean(tf.cast(tf.equal(prediction, tf.argmax(y_target,0)), t
 # Declare optimizer
 my_opt = tf.train.GradientDescentOptimizer(0.0001)
 train_step = my_opt.minimize(loss)
+
 
 # Initialize variables
 init = tf.global_variables_initializer()
