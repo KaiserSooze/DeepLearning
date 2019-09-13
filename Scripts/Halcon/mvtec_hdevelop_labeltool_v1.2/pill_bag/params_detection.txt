@@ -1,0 +1,24 @@
+* Dataset type (either 'detection' or 'segmentation')
+dataset_type := 'detection'
+
+* Path where the images to label are placed
+image_dir := 'pill_bag/images'
+
+* Path of a .txt-file containing the class names, one in each row
+class_names_file := 'pill_bag/classes.txt'
+
+* Default value for object class
+default_class_name := 'Omega-3'
+
+* Path where the DLDataset should be stored
+dl_dataset_file := 'pill_bag/pill_bag_detection.hdict'
+
+
+*******************************
+* Optional display parameters *
+*******************************
+
+* Enter the maximal width and height of the images
+* the display windows will have a size proportional to the ImageWidth and ImageHeight
+image_width := 1248
+image_height := 720

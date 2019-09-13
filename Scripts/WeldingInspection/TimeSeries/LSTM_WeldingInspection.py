@@ -30,13 +30,9 @@ root_train = r'C:\Users\sanatara\DeepLearning\Scripts\WeldingInspection\TimeSeri
 
 # In[3]:
 
-
 fileorigins =[]
 
-
 # In[4]:
-
-
 #Function for prepreocessing your data 
 def preprocess_train_test(root):
     allfiles =[]
@@ -58,8 +54,7 @@ def preprocess_train_test(root):
                 df = df.rename(columns={'Zeit':'Time', 'Fehler':'Error'})
 
             a = df.drop(['Time','P-Ref+','Plasma','Error','P-Ref-','P-MW','T-Ref+','T-Ref-','T-MW','T-Raw','R-Ref+','Refl','R-Ref-','R-MW'],axis=1)
-            
-            
+                     
             df1 = a[0:753]
             df2 = a[753:1440]
             df3 = a[1458:2118] 
@@ -99,7 +94,6 @@ def preprocess_train_test(root):
 def extract_labels(labelArray):
     lbl=[]
     for weld in labelArray:
-        label=[]
         lbl.append(CLASSES[weld[0]])
     a = np.reshape(np.array(lbl),(-1,1))
     return a
@@ -113,36 +107,25 @@ def reshape_train_test(data):
 
 
 # In[5]:
-
-
 X_train = preprocess_train_test(root_train)
-#len(X_train)
-
-
 N_CLASSES = 2
 CLASSES = {"Bad":0,"Good":1} 
 label_for_train = [a["classification"].to_numpy()for a in X_train ]
-#label_for_test = [a["classification"].to_numpy()for a in X_test]
 y_train = extract_labels(label_for_train)
-#y_test = extract_labels(label_for_test)
 X_train1 = reshape_train_test(X_train)
 
-
-
 # In[6]:
-
-
 y_train
-
 
 # In[10]:
 
-
 from tensorflow.keras.optimizers import Adam,SGD,RMSprop
 model = Sequential()
-model.add(LSTM(256,input_shape=(660,3),return_sequences=False))#True = many to many
+model.add(LSTM(128,input_shape=(660,3),return_sequences=True))#True = many to many
 model.add(Dropout(0.2))
-#model.add(Dense(64,kernel_initializer='normal',activation='linear'))
+model.add(LSTM(128,input_shape=(660,3),return_sequences=True))
+model.add(Dropout(0.2))
+model.add(LSTM(128,input_shape=(660,3),return_sequences=False))
 model.add(Dense(1, activation='sigmoid'))
 model.compile(loss='binary_crossentropy',optimizer ='Adam',metrics=['accuracy'])
 
@@ -296,7 +279,7 @@ def plot_confusion_matrix(cm, classes, normalize=True, title='Confusion Matrix',
     plt.xlabel('Predicted Label')
 #    plt.savefig('C:/Users/nadhola/Desktop/Graph for three parameter/threeparameterwithsampling660/cf3binarysigmoidadamlr.png', bbox_inches='tight')
 
-cm_plot_labels = ['Bad','Good']
+cm_plot_labels = ['Good','Bad']
 plot_confusion_matrix(cm, cm_plot_labels, title='Confusion Matrix')
 
 
