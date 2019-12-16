@@ -1,0 +1,4573 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.2" halcon_version="19.11.0.0">
+<procedure name="main">
+<interface/>
+<body>
+<c>**********************************************************************</c>
+<c>* File:         mvtec_hdev_labeltool.hdev                            *</c>
+<c>* Description:  This is the main file of the MVTec HDevelop          *</c>
+<c>*               prototypic labeltool.                                *</c>
+<c>*                                                                    *</c>
+<c>* Authors:      MVTec Software GmbH, 2019                            *</c>
+<c>**********************************************************************</c>
+<c>*</c>
+<c>* NOTE: Before you start, please take a look at the documentation.</c>
+<c>*       In particular, to setup the labeltool for a new dataset, you</c>
+<c>*       need to:</c>
+<c>*         * Set parameters like the image directory, output path and</c>
+<c>*           classnames-file in a params.txt-file.</c>
+<c>*         * Add the procedures-directory to the procedure-paths.</c>
+<c>*           (Procedures-&gt;Manage Procedures)</c>
+<c>*         * Specify a meaningful dataset name and the location of the</c>
+<c>*           params.txt-file below.</c>
+<c>*</c>
+<c>********* SET INPUT PARAMETERS HERE **************</c>
+<c>* </c>
+<c>* </c>
+<c>* Path to the configuration file.</c>
+<c>* It is used to define e.g. input and output paths and set the parameters</c>
+<c>* of the labeltool.</c>
+<c>* All possible configurations are explained within the file </c>
+<c>* labeltool_parameters_template.txt.</c>
+<l>LabeltoolParamsFile := 'pill_bag/params_detection.txt'</l>
+<l>* LabeltoolParamsFile := 'pill_bag/params_detection_rect2.txt'</l>
+<l>* LabeltoolParamsFile := 'pill_bag/params_segmentation.txt'</l>
+<c>* </c>
+<c>* </c>
+<c>* **************************************************************</c>
+<c>* **  Initialization of label tool parameters and DLDataset  ***</c>
+<c>* **************************************************************</c>
+<c>* </c>
+<l>dlt_initialize_labeltool (LabeltoolParamsFile, LabeltoolParams, DLDataset)</l>
+<c>* </c>
+<c>* </c>
+<c>* *********************************************</c>
+<c>* **  Browse through the dataset and label  ***</c>
+<c>* *********************************************</c>
+<c>* </c>
+<l>dlt_browse_and_label_dataset (LabeltoolParams, DLDataset)</l>
+<c>* </c>
+<c>* </c>
+<c>* END OF PROGRAM</c>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+<procedure name="dlt_initialize_labeltool">
+<interface>
+<ic>
+<par name="LabeltoolParamsFile" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure collects some parameters used in the main-procedure, open necessary window-handles</c>
+<c>* and set some fixed parameters.</c>
+<c>*</c>
+<c>* Create and load labeltool parameters.</c>
+<l>dlt_create_default_labeltool_parameters (LabeltoolParams)</l>
+<l>dlt_load_labeltool_parameters_from_file (LabeltoolParams, LabeltoolParamsFile)</l>
+<c>*</c>
+<c>* Get some of the parameters that we use inside the main-procedure or here.</c>
+<l>get_dict_tuple (LabeltoolParams, 'image_width', ImageWidth)</l>
+<l>get_dict_tuple (LabeltoolParams, 'image_height', ImageHeight)</l>
+<l>get_dict_tuple (LabeltoolParams, 'image_window_size_factor', WindowSizeFactor)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_names', ClassNames)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_names_file', ClassNamesFile)</l>
+<l>get_dict_tuple (LabeltoolParams, 'default_class_name', DefaultClassname)</l>
+<l>get_dict_tuple (LabeltoolParams, 'image_dir', ImageDir)</l>
+<l>get_dict_tuple (LabeltoolParams, 'dl_dataset_file', DLDatasetFile)</l>
+<l>get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>get_dict_tuple (LabeltoolParams, 'set_background_id', SetBackgroundID)</l>
+<c>*</c>
+<c>* Check some necessary parameters.</c>
+<c>*</c>
+<l>DatasetTypeCorrect := find(['detection', 'detection_rect2', 'segmentation'], DatasetType)[&gt;]-1</l>
+<l>if (not DatasetTypeCorrect)</l>
+<l>    throw (['Please set a valid dataset type (\'detection\' or \'segmentation\')'])</l>
+<l>endif</l>
+<l>if (DLDatasetFile == 'none')</l>
+<l>    throw (['No path where to save the labels has been set (DLDatasetFile)'])</l>
+<l>endif</l>
+<l>if (ImageDir == 'none')</l>
+<l>    throw (['No path where to find the images has been set (ImageDir)'])</l>
+<l>endif</l>
+<l>if (ClassNamesFile != 'none')</l>
+<l>    dlt_read_classnames (ClassNamesFile, ClassNames)</l>
+<l>    set_dict_tuple (LabeltoolParams, 'class_names', ClassNames)</l>
+<l>endif</l>
+<l>if (|ClassNames| == 0)</l>
+<l>    throw (['No ClassNames have been set (ClassNames)'])</l>
+<l>endif</l>
+<l>if (DatasetType == 'segmentation')</l>
+<l>    get_dict_tuple (LabeltoolParams, 'segmentation_dir', SegmentationDir)</l>
+<l>    file_exists (SegmentationDir, SegmentationDirExists)</l>
+<l>    if (not SegmentationDirExists)</l>
+<l>        make_dir (SegmentationDir)</l>
+<l>    endif</l>
+<l>endif</l>
+<c>* </c>
+<c>* </c>
+<c>* **************************</c>
+<c>* ** Set general setting ***</c>
+<c>* **************************</c>
+<c>* </c>
+<c>*  Note that this is not changeable via parameter-file.</c>
+<c>*</c>
+<c>* Set the region type according to DatasetType.</c>
+<l>if (DatasetType == 'detection')</l>
+<l>    set_dict_tuple (LabeltoolParams, 'region_type', 'rectangle1')</l>
+<l>elseif (DatasetType == 'detection_rect2')</l>
+<l>    set_dict_tuple (LabeltoolParams, 'region_type', 'rectangle2')</l>
+<l>else</l>
+<l>    set_dict_tuple (LabeltoolParams, 'region_type', 'mask')</l>
+<l>endif</l>
+<c>* </c>
+<c>* Avoid clipping regions at the boundary</c>
+<l>set_system ('clip_region', 'false')</l>
+<c>*</c>
+<c>* Seconds to wait to make text readable</c>
+<l>WaitSeconds := 0.1</l>
+<l>set_dict_tuple (LabeltoolParams, 'wait_seconds', WaitSeconds)</l>
+<c>*</c>
+<c>* Define some GUI colors.</c>
+<l>TopicColors := ['#FF7F24', '#00BFFF', '#40E0D0', '#FC2904']</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_topic_colors', TopicColors)</l>
+<c>*</c>
+<c>* Per default, no region larger than 512x512 is displayed</c>
+<c>* unless a larger image has been displayed beforehand.</c>
+<c>* Therefore, we display a large image</c>
+<l>gen_image_const (Image, 'byte', 2512, 2512)</l>
+<l>dev_display (Image)</l>
+<c>*</c>
+<c>* Close some windows that are not needed (if not DEBUG)</c>
+<l>DEBUG := true</l>
+<l>if (DEBUG == false)</l>
+<l>    try</l>
+<l>        dev_close_tool ('operator_window')</l>
+<l>    catch (Exception)</l>
+<l>    endtry</l>
+<l>    try</l>
+<l>        dev_close_tool ('program_listing')</l>
+<l>    catch (Exception)</l>
+<l>    endtry</l>
+<l>    try</l>
+<l>        dev_close_tool ('variable_view')</l>
+<l>    catch (Exception)</l>
+<l>    endtry</l>
+<l>endif</l>
+<c>*</c>
+<c>* Generate window handles.</c>
+<l>ImageWindowWidth := ImageWidth * WindowSizeFactor</l>
+<l>ImageWindowHeight := ImageHeight * WindowSizeFactor</l>
+<l>dev_close_window ( )</l>
+<l>dev_update_off()</l>
+<c>* Disable context menu on right-click.</c>
+<l>dev_set_preferences ('graphics_window_context_menu', 'false')</l>
+<l>MessageWindowHeight := 75</l>
+<l>WindowImageRow := MessageWindowHeight + 55</l>
+<c>* Display Image Window.</c>
+<l>ImageWindowRow := WindowImageRow</l>
+<l>ImageWindowCol := 0</l>
+<l>dev_open_window (ImageWindowRow, ImageWindowCol, ImageWindowWidth, ImageWindowHeight, 'black', ImageWindowHandle)</l>
+<c>* Message Window.</c>
+<l>MessageWindowWidth := ImageWindowWidth</l>
+<l>dev_open_window (0, 0, MessageWindowWidth, MessageWindowHeight, 'black', MessageWindowHandle)</l>
+<c>* Zoom Window.</c>
+<l>dev_open_window (WindowImageRow, ImageWindowWidth+8, 300, 400, 'black',ZoomWindowHandle)</l>
+<c>* InstructionWindow.</c>
+<l>dev_open_window (WindowImageRow, ImageWindowWidth+316, 350, 400, 'black', InstructionWindowHandle)</l>
+<l>set_display_font (InstructionWindowHandle, 12, 'mono', 'true', 'false')</l>
+<c>* </c>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_image', ImageWindowHandle)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_image_row', ImageWindowRow)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_image_col', ImageWindowCol)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_image_width', ImageWindowWidth)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_image_height', ImageWindowHeight)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_zoom', ZoomWindowHandle)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_instruction', InstructionWindowHandle)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_message', MessageWindowHandle)</l>
+<c>* </c>
+<c>* </c>
+<c>* *****************************</c>
+<c>* **  Initialize DLDataset  ***</c>
+<c>* *****************************</c>
+<c>*</c>
+<c>* Check if a DLDataset exists, if so calculate the mapping from class ID to class idx.</c>
+<l>file_exists (DLDatasetFile, DLDatasetExists)</l>
+<l>if (DLDatasetExists)</l>
+<l>    read_dict (DLDatasetFile, [], [], DLDataset)</l>
+<l>    get_dict_tuple (DLDataset, 'class_ids', ClassIDs)</l>
+<l>    get_dict_tuple (DLDataset, 'class_names', ClassNames)</l>
+<l>    tuple_gen_const (max(ClassIDs)+1, -1, ClassIDToClassIdx)</l>
+<l>    ClassIDToClassIdx[ClassIDs] := [0:|ClassIDs|-1]</l>
+<l>    set_dict_tuple (LabeltoolParams, 'class_ids', ClassIDs)</l>
+<l>    set_dict_tuple (LabeltoolParams, 'class_id_to_class_idx', ClassIDToClassIdx)</l>
+<l>    set_dict_tuple (LabeltoolParams, 'class_names', ClassNames)</l>
+<l>    if (DatasetType == 'segmentation')</l>
+<l>        get_dict_tuple (LabeltoolParams, 'background_class_name', BackgroundClassName)</l>
+<l>        BackgroundIdx := find_first(ClassNames, BackgroundClassName)</l>
+<l>        if (BackgroundIdx == -1 or |BackgroundIdx| == 0)</l>
+<l>            throw ('Parameter \'background_class_name\' has to be part of the class names in the DLDataset.')</l>
+<l>        endif</l>
+<c>        * Set new backround ID.</c>
+<l>        set_dict_tuple (LabeltoolParams, 'set_background_id', BackgroundIdx)</l>
+<l>        ClassIDsForeground := remove (ClassIDs, BackgroundIdx)</l>
+<l>        set_dict_tuple (LabeltoolParams, 'class_ids_foreground', ClassIDsForeground)</l>
+<l>    endif</l>
+<c>    * </c>
+<c>    * For later purposes, get maximal image ID.</c>
+<l>    get_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>    ImageID := 1</l>
+<l>    for Index := 0 to |Samples| - 1 by 1</l>
+<l>        get_dict_tuple (Samples[Index], 'image_id', ImageIDTmp)</l>
+<l>        ImageID := max2(ImageID, ImageIDTmp)</l>
+<l>    endfor</l>
+<l>    set_dict_tuple (LabeltoolParams, 'max_image_id', ImageID)</l>
+<l>else</l>
+<l>    dlt_initialize_dl_dataset (LabeltoolParams, DLDataset)</l>
+<l>endif</l>
+<c>* </c>
+<c>* </c>
+<c>* ***************************************************</c>
+<c>* **  Set further setting depending on DLDataset  ***</c>
+<c>* ***************************************************</c>
+<c>* </c>
+<c>* Define colors to display classes.</c>
+<l>dlt_gui_get_distinct_colors (|ClassNames|, false, ClassColors)</l>
+<l>if (DatasetType == 'segmentation')</l>
+<c>    * For segmentation, add the color white for the backround class.</c>
+<l>    ClassColors := ['#ffffff', ClassColors]</l>
+<l>endif</l>
+<l>set_dict_tuple (LabeltoolParams, 'class_colors', ClassColors)</l>
+<c>*</c>
+<c>* If there is only one class, set it to the default class!</c>
+<l>if (|ClassNames| == 1)</l>
+<l>    DefaultClassname := ClassNames[0]</l>
+<l>    set_dict_tuple (LabeltoolParams, 'default_class_name', DefaultClassname)</l>
+<l>endif</l>
+<c>*</c>
+<c>* Check if the default class is valid.</c>
+<l>DefaultClassValid := find (ClassNames, DefaultClassname)[&gt;]-1</l>
+<l>if (not DefaultClassValid)</l>
+<l>    throw ('Invalid default_class_name, has to be one of the class names')</l>
+<l>endif</l>
+<c>* </c>
+<c>* Generate parameters for window showing class names when class type of an annotation is changed.</c>
+<l>ClassWindowWidth := 350</l>
+<l>ClassWindowMaxHeight := ImageWindowHeight</l>
+<l>ClassWindowHeight := ClassWindowMaxHeight</l>
+<l>dev_open_window (ImageWindowRow, ImageWindowCol + ImageWindowWidth + 8, ClassWindowWidth, ClassWindowHeight, 'black', ClassWindowHandle)</l>
+<c>*</c>
+<c>* Generation of a tuple called "ClassNamesWithIndex" of length |Labels| for display.</c>
+<l>tuple_gen_const (|ClassNames|,'', ClassNamesWithIndex)</l>
+<l>tuple_gen_const (|ClassNames|,'', StringWidths)</l>
+<l>ClassNamesWithIndexTitle := '&lt;index&gt;: &lt;class name&gt;'</l>
+<l>get_string_extents (ClassWindowHandle, ClassNamesWithIndexTitle, _, _, TitleStringWidth, _)</l>
+<l>for i := 0 to |ClassNames| - 1 by 1</l>
+<l>    ClassNamesWithIndex[i] := i + ': ' + ClassNames[i]</l>
+<l>    get_string_extents (ClassWindowHandle, ClassNamesWithIndex[i], _, _, StringWidth, StringHeight)</l>
+<l>    StringWidths[i] := StringWidth</l>
+<l>endfor</l>
+<c>* </c>
+<c>* Split the strings in several columns, depenting on the number of class names.</c>
+<l>get_string_extents (ClassWindowHandle, [ClassNamesWithIndexTitle, ClassNamesWithIndex], Ascent, Descent, _, StringHeight)</l>
+<l>StringHeight := Ascent + Descent</l>
+<c>* Check how many strings should fit in a column.</c>
+<l>HeightOffsetFactor := 1.05</l>
+<l>NumStringsPerColumn := int(ClassWindowHeight/(HeightOffsetFactor*StringHeight))</l>
+<l>NumColumns := 0</l>
+<l>ClassWindowWidth := 12</l>
+<l>ColumnWitdhs := []</l>
+<l>while (1)</l>
+<c>    * Create entries of a new column.</c>
+<l>    NumColumns := NumColumns + 1</l>
+<l>    ColumnStrings[0] := ClassNamesWithIndexTitle</l>
+<l>    Indices := [min2((NumColumns-1)*(NumStringsPerColumn - 1),|ClassNamesWithIndex|-1):min2(NumColumns*(NumStringsPerColumn - 1) - 1,|ClassNamesWithIndex|-1)]</l>
+<l>    ClassNamesWithIndexColumn := ClassNamesWithIndex[Indices]</l>
+<l>    ColumnStrings[1:|ClassNamesWithIndexColumn|] := ClassNamesWithIndexColumn</l>
+<l>    ClassNamesWithIndexColumns.at(NumColumns - 1) := ColumnStrings</l>
+<l>    ColumnStrings := []</l>
+<c>    * Add width of this column to ClassWindowWidth.</c>
+<l>    ColumnWitdhs[NumColumns - 1] := max2(TitleStringWidth, max(StringWidths[Indices]))</l>
+<l>    ClassWindowWidth := ClassWindowWidth + ColumnWitdhs[NumColumns - 1] + 12</l>
+<l>    if (|ClassNamesWithIndexColumn| &lt; NumStringsPerColumn - 1 or (NumColumns == |ClassNamesWithIndex| / real(NumStringsPerColumn - 1)))</l>
+<l>        break</l>
+<l>    endif</l>
+<l>endwhile</l>
+<c>* </c>
+<c>* Set parameters and ClassNamesWithIndexColumn to LabeltoolParams.</c>
+<l>ClassWindowRow := ImageWindowRow</l>
+<l>ClassWindowCol := ImageWindowCol + ImageWindowWidth + 8</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_class_row', ClassWindowRow)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_class_col', ClassWindowCol)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_class_width', ClassWindowWidth)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_class_height', ClassWindowHeight)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_class_num_columns', NumColumns)</l>
+<l>set_dict_tuple (LabeltoolParams, 'window_handle_class_columns_widths', ColumnWitdhs)</l>
+<l>for Index := 0 to NumColumns - 1 by 1</l>
+<l>    set_dict_tuple (LabeltoolParams, 'window_handle_class_string_columns_' + Index, ClassNamesWithIndexColumns.at(Index))</l>
+<l>endfor</l>
+<c>* </c>
+<c>* Close window showing class names.</c>
+<l>dev_set_window (ClassWindowHandle)</l>
+<l>dev_close_window ()</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_initialize_labeltool">
+<parameters>
+<parameter id="DLDataset"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="LabeltoolParamsFile"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_browse_and_label_dataset">
+<interface>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Browse through dataset and generate or label samples.</c>
+<c>*</c>
+<c>* We get the options and buttons of the labeltool.</c>
+<l>dlt_create_tool_options (LabeltoolParams, BrowseOptions, BrowseChars, BrowseCodes, BrowseMenuMessage, ToolOptions, ToolChars, ToolCodes, ToolMenuMessage)</l>
+<c>*</c>
+<c>*</c>
+<c>* Get some parameters that are necessary for the browse_dataset procedure</c>
+<l>dlt_get_labeltool_params_for_browse (LabeltoolParams, TopicColors, ClassColors, ImageWindowHandle, ZoomWindowHandle, InstructionWindowHandle, MessageWindowHandle, WaitSeconds, DLDatasetFile, DatasetType)</l>
+<c>*</c>
+<c>* Get some dataset specific attributes</c>
+<l>get_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>get_dict_tuple (DLDataset, 'class_names', ClassNames)</l>
+<l>get_dict_tuple (DLDataset, 'class_ids', ClassIDs)</l>
+<l>get_dict_tuple (DLDataset, 'image_dir', ImageDir)</l>
+<c>*</c>
+<c>* Get the image-files.</c>
+<l>dev_display_dlt_menu_message (MessageWindowHandle, TopicColors[1], 'Please wait until list of image files is read in.', 'centered')</l>
+<l>list_image_files (ImageDir, 'tif|tiff|gif|bmp|jpg|jpeg|jp2|png|pcx|pgm|ppm|pbm|xwd|ima', ['recursive'], ImageFiles)</l>
+<l>if (|ImageFiles| == 0)</l>
+<l>    throw('No images found in image_dir!')</l>
+<l>endif</l>
+<c>* Remove the Image Dir from File</c>
+<l>tuple_regexp_replace (ImageFiles, ImageDir, '', ImageFiles)</l>
+<l>tuple_regexp_replace (ImageFiles, '^/', '', ImageFiles)</l>
+<c>*</c>
+<l>NumImages := |ImageFiles|</l>
+<c>*</c>
+<c>*</c>
+<c>* *******************************</c>
+<c>* **  Walk through directory  ***</c>
+<c>* *******************************</c>
+<c>* </c>
+<l>create_dict (PreviousSample)</l>
+<l>ImageCounter := 0</l>
+<l>DataChanged := false</l>
+<l>RemoveCurrentSample := false</l>
+<l>WriteData := false</l>
+<l>Finished := false</l>
+<c>* </c>
+<l>while (1)</l>
+<c>    * </c>
+<c>    * *******************************</c>
+<c>    * **  Read the current image  ***</c>
+<c>    * *******************************</c>
+<c>    * </c>
+<l>    ImagePath := ImageFiles[ImageCounter]</l>
+<l>    read_image (Image, ImageDir + '/' + ImageFiles[ImageCounter])</l>
+<c>    * </c>
+<c>    * Image filename relative to ImageDir.</c>
+<l>    ImageFilename := ImageFiles[ImageCounter]</l>
+<c>    * </c>
+<c>    * Get or create current sample.</c>
+<l>    dlt_get_sample_by_image_filename (LabeltoolParams, DLDataset, ImageFilename, CurrentSample, CurrentIdx, ImageID, SampleExists)</l>
+<c>    * </c>
+<c>    * Remember previous image index for option 'PreviousAnnotations'.</c>
+<l>    PreviousImageCounter := ImageCounter</l>
+<c>    * </c>
+<c>    * </c>
+<c>    * ***********************************</c>
+<c>    * **  Display the current result  ***</c>
+<c>    * ***********************************</c>
+<c>    * </c>
+<l>    dev_display_dlt_sample_annotations (Image, LabeltoolParams, CurrentSample)</l>
+<l>    dev_set_window (InstructionWindowHandle)</l>
+<l>    dev_clear_window ()</l>
+<l>    disp_message (InstructionWindowHandle, BrowseMenuMessage, 'window', 12, 12, 'black', 'true')</l>
+<c>    *</c>
+<c>    * Display the current image/sample information in the menu message.</c>
+<l>    dlt_get_image_status_message (CurrentSample, ImageCounter, ImageFilename, SampleExists, DisplayMessage)</l>
+<l>    dev_display_dlt_menu_message (MessageWindowHandle, TopicColors[0], DisplayMessage, 'show_image_status')</l>
+<c>    * </c>
+<c>    * </c>
+<c>    * *****************************************************</c>
+<c>    * **  Wait for key and offer to change annotations  ***</c>
+<c>    * *****************************************************</c>
+<c>    * </c>
+<l>    read_char (ImageWindowHandle, Char, Code)</l>
+<c>    * </c>
+<c>    * Go through codes and chars from config.</c>
+<l>    CharFound := find_first(BrowseChars, Char)</l>
+<l>    CodeFound := find_first(BrowseCodes, Code)</l>
+<l>    if ((CharFound == -1 and CodeFound == -1) or (CodeFound == -1 and Char == ''))</l>
+<l>        dev_display_dlt_menu_message (MessageWindowHandle, 'yellow', 'invalid input', 'centered')</l>
+<l>        wait_seconds (7 * WaitSeconds)</l>
+<l>    else</l>
+<c>        * Only one should be found.</c>
+<l>        IdxFound := number(CharFound[&gt;]-1) * CharFound + number(CodeFound[&gt;]-1) * CodeFound</l>
+<l>        Command := BrowseOptions[IdxFound]</l>
+<c>        * </c>
+<c>        * Go through options.</c>
+<l>        if (Command == 'GoToPrevious')</l>
+<c>            * </c>
+<c>            * *****************************</c>
+<c>            * **  Go to previous image  ***</c>
+<c>            * *****************************</c>
+<c>            * </c>
+<l>            dlt_go_to_previous_image (DataChanged, ImageCounter, NumImages, WriteData, ImageCounter)</l>
+<c>            * </c>
+<l>        elseif (Command == 'GoToNext')</l>
+<c>            * </c>
+<c>            * *************************</c>
+<c>            * **  Go to next image  ***</c>
+<c>            * *************************</c>
+<c>            * </c>
+<l>            dlt_go_to_next_image (DataChanged, ImageCounter, NumImages, WriteData, ImageCounter)</l>
+<c>            * </c>
+<l>        elseif (Command == 'Jump')</l>
+<c>            * </c>
+<c>            * ***********************</c>
+<c>            * **  Jump to image  ***</c>
+<c>            * ***********************</c>
+<c>            * </c>
+<l>            dlt_jump_to_image (DataChanged, ImageWindowHandle, MessageWindowHandle, TopicColors, NumImages, WriteData, ImageCounter)</l>
+<c>            * </c>
+<l>        elseif (Command == 'ChangeAnnotations')</l>
+<c>            * </c>
+<c>            * **********************</c>
+<c>            * **  Change labels  ***</c>
+<c>            * **********************</c>
+<c>            * </c>
+<l>            dlt_annotate_sample (Image, DataChanged, LabeltoolParams, CurrentSample, ToolChars, ToolCodes, ToolOptions, ToolMenuMessage, ImageCounter, WriteData)</l>
+<c>            * </c>
+<l>        elseif (Command == 'PreviousAnnotations')</l>
+<c>            * </c>
+<c>            * ********************************************************</c>
+<c>            * **  Initialize with annotations from previous image  ***</c>
+<c>            * ********************************************************</c>
+<c>            * </c>
+<l>            dlt_copy_annotations_from_previous_sample (LabeltoolParams, PreviousSample, CurrentSample, WriteData)</l>
+<c>            * </c>
+<l>        elseif (Command == 'RemoveLabelOfThisImage')</l>
+<c>            * </c>
+<c>            * *******************************************</c>
+<c>            * **  Remove this label from the dataset  ***</c>
+<c>            * *******************************************</c>
+<c>            * </c>
+<l>            WriteData := true</l>
+<l>            RemoveCurrentSample := true</l>
+<c>            *</c>
+<l>        elseif (Command == 'Stop' or Char == '\x1B')</l>
+<c>            * </c>
+<c>            * *************</c>
+<c>            * **  Stop  ***</c>
+<c>            * *************</c>
+<c>            * </c>
+<l>            stop ()</l>
+<c>            *</c>
+<l>        elseif (Command == 'EndProgram')</l>
+<c>            * </c>
+<c>            * *****************************************</c>
+<c>            * **  Save annotations and end program  ***</c>
+<c>            * *****************************************</c>
+<c>            * </c>
+<l>            WriteData := false</l>
+<l>            Finished := true</l>
+<c>            * </c>
+<l>        else</l>
+<l>            dev_display_dlt_menu_message (MessageWindowHandle, 'yellow', 'invalid input', 'centered')</l>
+<l>            wait_seconds (2 * WaitSeconds)</l>
+<l>        endif</l>
+<l>    endif</l>
+<c>    *</c>
+<c>    *</c>
+<c>    * ******************************************</c>
+<c>    * **  If data has changed, write it out  ***</c>
+<c>    * ******************************************</c>
+<c>    * </c>
+<l>    if (WriteData)</l>
+<c>        * </c>
+<l>        if (DatasetType == 'segmentation')</l>
+<c>            * Write segmentation image.</c>
+<l>            dlt_write_sample_segmentation_image (CurrentSample, LabeltoolParams)</l>
+<l>        endif</l>
+<c>        * </c>
+<c>        * Add current sample to DLDataset except it shall be removed.</c>
+<l>        if (not RemoveCurrentSample)</l>
+<l>            dlt_add_sample_to_dl_dataset (LabeltoolParams, DLDataset, CurrentIdx, CurrentSample, SampleExists)</l>
+<l>        else</l>
+<l>            dlt_remove_sample_from_dl_dataset (DLDataset, CurrentSample)</l>
+<l>        endif</l>
+<c>        *</c>
+<c>        * Write the DLDataset.</c>
+<l>        dlt_dl_dataset_remove_unnecessary_keys (DLDataset)</l>
+<l>        write_dict (DLDataset, DLDatasetFile, [], [])</l>
+<l>        dev_display_dlt_menu_message (MessageWindowHandle, 'green', 'Data saved', 'centered')</l>
+<l>        wait_seconds (WaitSeconds)</l>
+<c>        * </c>
+<c>        * Reset flags.</c>
+<l>        WriteData := false</l>
+<l>    endif</l>
+<c>    * </c>
+<l>    if (PreviousImageCounter != ImageCounter)</l>
+<c>        * We'll be reading new data. Remember the old data to initialize the next image with it.</c>
+<l>        copy_dict (CurrentSample, [], [], PreviousSample)</l>
+<l>    endif</l>
+<c>    * </c>
+<l>    if (Finished)</l>
+<c>        * </c>
+<c>        * Before the final save, check image IDs in DLDataset.</c>
+<l>        dlt_dl_dataset_check_image_ids (DLDataset)</l>
+<c>        * </c>
+<c>        * Write the DLDataset.</c>
+<l>        dlt_dl_dataset_remove_unnecessary_keys (DLDataset)</l>
+<l>        write_dict (DLDataset, DLDatasetFile, [], [])</l>
+<l>        dev_display_dlt_menu_message (MessageWindowHandle, 'green', 'Data saved', 'centered')</l>
+<l>        wait_seconds (WaitSeconds)</l>
+<c>        * </c>
+<l>        break</l>
+<l>    endif</l>
+<c>    *</c>
+<c>    *</c>
+<c>    * ********************</c>
+<c>    * **  Reset flags  ***</c>
+<c>    * ********************</c>
+<c>    * </c>
+<l>    DataChanged := false</l>
+<l>    RemoveCurrentSample := false</l>
+<c>    * </c>
+<l>endwhile</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_browse_and_label_dataset">
+<short lang="de_DE">Browse through a DLDataset and generate or label each sample.</short>
+<parameters>
+<parameter id="DLDataset"/>
+<parameter id="LabeltoolParams"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_create_default_labeltool_parameters">
+<interface>
+<oc>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* Generate a dict with default parameters.</c>
+<c>* </c>
+<l>create_dict(LabeltoolParams)</l>
+<l>set_dict_tuple (LabeltoolParams, 'dataset_type', 'detection')</l>
+<l>set_dict_tuple (LabeltoolParams, 'image_dir', 'none')</l>
+<l>set_dict_tuple (LabeltoolParams, 'class_names', [])</l>
+<l>set_dict_tuple (LabeltoolParams, 'class_names_file', 'none')</l>
+<l>set_dict_tuple (LabeltoolParams, 'default_class_name', 'unclassified')</l>
+<l>set_dict_tuple (LabeltoolParams, 'background_class_name', 'background')</l>
+<l>set_dict_tuple (LabeltoolParams, 'dl_dataset_file', 'none')</l>
+<l>set_dict_tuple (LabeltoolParams, 'segmentation_dir', 'none')</l>
+<l>set_dict_tuple (LabeltoolParams, 'set_background_id', 0)</l>
+<l>set_dict_tuple (LabeltoolParams, 'zoom_factor', 2)</l>
+<l>set_dict_tuple (LabeltoolParams, 'polygon_tolerance', 5)</l>
+<l>set_dict_tuple (LabeltoolParams, 'image_width', 1248)</l>
+<l>set_dict_tuple (LabeltoolParams, 'image_height', 720)</l>
+<l>set_dict_tuple (LabeltoolParams, 'image_window_size_factor', 0.8)</l>
+<l>set_dict_tuple (LabeltoolParams, 'display_region_opacity', 70)</l>
+<l>set_dict_tuple (LabeltoolParams, 'display_region_opacity_selected', 90)</l>
+<l>set_dict_tuple (LabeltoolParams, 'display_region_opacity_unselected', 60)</l>
+<c>* This is a helper parameter that saves the maximal image ID already put to an image.</c>
+<l>set_dict_tuple (LabeltoolParams, 'max_image_id', 0)</l>
+<c>* This is a helper parameter supporting a quick search in the DLDataset.</c>
+<l>set_dict_tuple (LabeltoolParams, 'last_sample_index', 0)</l>
+<c>*</c>
+<l>return ()</l>
+</body>
+<docu id="dlt_create_default_labeltool_parameters">
+<abstract lang="de_DE">The parameters can be overwritten by specifying them in a label_tool_params.txt-file.</abstract>
+<short lang="de_DE">Generate a dict with default parameters of the labeltool.</short>
+<parameters>
+<parameter id="LabeltoolParams">
+<default_type>integer</default_type>
+<description lang="de_DE">Dict containing the default parameters of the labeltool.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_load_labeltool_parameters_from_file">
+<interface>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="LabeltoolParamFile" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* If the file doesn't exist, quietly return and change no parameters. This</c>
+<c>* enables using the tool to label without needing any config files</c>
+<l>if (LabeltoolParamFile # [])</l>
+<l>    file_exists (LabeltoolParamFile, FileExists)</l>
+<l>else</l>
+<l>    FileExists := false</l>
+<l>endif</l>
+<l>if (FileExists)</l>
+<l>    open_file (LabeltoolParamFile, 'input', FileHandle)</l>
+<l>    IsEOF := false</l>
+<c>    *</c>
+<l>    while(IsEOF == false)</l>
+<l>        fread_line (FileHandle, InLine, IsEOF)</l>
+<c>        *</c>
+<c>        * Ignore all line which are empty or a comment</c>
+<l>        if (InLine == '\n' or InLine{0} == '*')</l>
+<l>            continue</l>
+<l>        else</l>
+<c>            * Get the name of the variable (it's the part before ':=')</c>
+<l>            tuple_regexp_test (InLine, ':=', NumMatches)</l>
+<l>            if (NumMatches == 1)</l>
+<c>                * Great, we've found an assignment, lets read it</c>
+<l>                tuple_regexp_replace (InLine, '\n', '', InLine)</l>
+<l>                tuple_strstr (InLine, ':=', Position)</l>
+<l>                if (Position # -1)</l>
+<l>                    Substrings[0] := InLine{0:Position-1}</l>
+<l>                    Substrings[1] := InLine{Position+2:strlen(InLine)-1}</l>
+<l>                endif</l>
+<c>                * Lets remove all trailing and starting whitespaces</c>
+<l>                tuple_regexp_replace (Substrings[0], ' *$', '', VariableName)</l>
+<l>                tuple_regexp_replace (Substrings[1], '^ *', '', VariableValue)</l>
+<l>                tuple_regexp_replace (VariableValue, ' *$', '', VariableValue)</l>
+<l>                tuple_regexp_replace (VariableValue, '\'\\r$', '', VariableValue)</l>
+<l>                tuple_regexp_replace (VariableValue, '\\r$', '', VariableValue)</l>
+<l>                tuple_regexp_replace (VariableValue, '^\\\'', '', VariableValue)</l>
+<c>                * Check if the VariableName is valid (check the message_handle)</c>
+<l>                get_dict_param(LabeltoolParams, 'key_exists', VariableName, has_it)</l>
+<l>                if (has_it == 1)</l>
+<l>                    dlt_string_tuple_to_tuple (VariableValue, VariableValue)</l>
+<l>                    tuple_is_int(VariableValue, IsInt)</l>
+<l>                    tuple_is_string_elem (VariableValue, IsString)</l>
+<l>                    if (find(IsString,1)#-1)</l>
+<l>                        if(VariableValue == 'true')</l>
+<l>                            VariableValue := true</l>
+<l>                        elseif(VariableValue=='false')</l>
+<l>                            VariableValue := false</l>
+<l>                        else</l>
+<l>                            tuple_regexp_replace (VariableValue, '\'*$', '', VariableValue)</l>
+<l>                            tuple_regexp_replace (VariableValue, '^\'*', '', VariableValue)</l>
+<l>                        endif</l>
+<l>                    endif</l>
+<l>                    set_dict_tuple (LabeltoolParams, VariableName, VariableValue)</l>
+<l>                else</l>
+<l>                    continue</l>
+<l>                endif</l>
+<c>                * Before setting the value, convert it to the right type!!</c>
+<l>            else</l>
+<c>                * Hmm, its a wierd, invalid line. It's neither a comment nor</c>
+<c>                * is it an empty line. We'll silently accept this for now</c>
+<l>                continue</l>
+<l>            endif</l>
+<l>        endif</l>
+<l>    endwhile</l>
+<l>    close_file (FileHandle)</l>
+<l>endif</l>
+<c>* </c>
+<l>return()</l>
+</body>
+<docu id="dlt_load_labeltool_parameters_from_file">
+<short lang="de_DE">Overwrite default labeltool parameters by reading values from a labeltool_parameters.txt-file</short>
+<parameters>
+<parameter id="LabeltoolParamFile">
+<default_type>integer</default_type>
+<default_value>LabeltoolParamFile</default_value>
+<description lang="de_DE">Full path of the labeltool_parameters.txt file that contains the parameters to be overwritten.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="LabeltoolParams">
+<default_type>integer</default_type>
+<default_value>LabeltoolParams</default_value>
+<description lang="de_DE">Dict with labeltool parameters that should be updated.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_read_classnames">
+<interface>
+<ic>
+<par name="Filepath" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Labels" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* Read class names from file.</c>
+<c>* </c>
+<c>* Test if filepath exists.</c>
+<l>file_exists (Filepath, FileExists)</l>
+<l>if (FileExists)</l>
+<c>    * Read the classnames from a file specified in main method.</c>
+<l>    open_file(Filepath,'input', Classfile)</l>
+<l>else</l>
+<l>    throw ('ClassNamesFile does not exist!')</l>
+<l>endif</l>
+<l>Labels := []</l>
+<l>IsEOF := false</l>
+<c>* Read the classnames line by line (we assume that each line of the </c>
+<c>* file contains exactly one classname).</c>
+<c>* If there is no entry in a line, no class is created.</c>
+<l>fread_line (Classfile, Label, IsEOF)</l>
+<l>repeat</l>
+<l>    tuple_regexp_replace (Label, '\n', '', Label)</l>
+<l>    if (Label != '')</l>
+<c>        * Check if label has already been added in order to keep the entries unique.</c>
+<l>        tuple_find_first (Labels, Label, Index)</l>
+<l>        if (Index == -1 or Index == [])</l>
+<l>            Labels := [Labels, Label]</l>
+<l>        endif</l>
+<l>    endif</l>
+<l>    fread_line (Classfile, Label, IsEOF)</l>
+<l>until (IsEOF == true)</l>
+<l>close_file(Classfile)</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_read_classnames">
+<abstract lang="de_DE">Reads all classnames used for labeiling out of the file specified in 'Filepath'</abstract>
+<parameters>
+<parameter id="Filepath">
+<default_type>string</default_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="Labels">
+<default_type>string</default_type>
+<description lang="de_DE">A tuple containing all class labels </description>
+<multivalue>optional</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dev_update_off">
+<interface/>
+<body>
+<c>* This procedure sets different update settings to 'off'.</c>
+<c>* This is useful to get the best performance and reduce overhead.</c>
+<c>* </c>
+<l>dev_update_pc ('off')</l>
+<l>dev_update_var ('off')</l>
+<l>dev_update_window ('off')</l>
+<l>return ()</l>
+</body>
+<docu id="dev_update_off">
+<abstract lang="en_US">This procedure sets dev_update_pc, dev_update_var and dev_update_window to 'off'.</abstract>
+<alternatives>
+<item>dev_update_pc</item>
+<item>dev_update_var</item>
+<item>dev_update_window</item>
+</alternatives>
+<chapters lang="de_DE">
+<item>Develop</item>
+</chapters>
+<chapters lang="en_US">
+<item>Develop</item>
+</chapters>
+<example lang="en_US">dev_update_off ()
+* do something
+dev_update_on ()</example>
+<keywords lang="de_DE">
+<item>Aktualisierungsmodus setzen</item>
+</keywords>
+<keywords lang="en_US">
+<item>set update mode</item>
+</keywords>
+<library lang="de_DE">MVTec Standard Procedures</library>
+<library lang="en_US">MVTec Standard Procedures</library>
+<see_also>
+<item>dev_update_on</item>
+</see_also>
+<short lang="de_DE">Switch dev_update_pc, dev_update_var and dev_update_window to 'off'.</short>
+<short lang="en_US">Switch dev_update_pc, dev_update_var and dev_update_window to 'off'.</short>
+<parameters/>
+</docu>
+</procedure>
+<procedure name="set_display_font">
+<interface>
+<ic>
+<par name="WindowHandle" base_type="ctrl" dimension="0"/>
+<par name="Size" base_type="ctrl" dimension="0"/>
+<par name="Font" base_type="ctrl" dimension="0"/>
+<par name="Bold" base_type="ctrl" dimension="0"/>
+<par name="Slant" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure sets the text font of the current window with</c>
+<c>* the specified attributes.</c>
+<c>* </c>
+<c>* Input parameters:</c>
+<c>* WindowHandle: The graphics window for which the font will be set</c>
+<c>* Size: The font size. If Size=-1, the default of 16 is used.</c>
+<c>* Bold: If set to 'true', a bold font is used</c>
+<c>* Slant: If set to 'true', a slanted font is used</c>
+<c>* </c>
+<l>get_system ('operating_system', OS)</l>
+<l>if (Size == [] or Size == -1)</l>
+<l>    Size := 16</l>
+<l>endif</l>
+<l>if (OS{0:2} == 'Win')</l>
+<c>    * Restore previous behaviour</c>
+<l>    Size := int(1.13677 * Size)</l>
+<l>else</l>
+<l>    Size := int(Size)</l>
+<l>endif</l>
+<l>if (Font == 'Courier')</l>
+<l>    Fonts := ['Courier','Courier 10 Pitch','Courier New','CourierNew','Liberation Mono']</l>
+<l>elseif (Font == 'mono')</l>
+<l>    Fonts := ['Consolas','Menlo','Courier','Courier 10 Pitch','FreeMono','Liberation Mono']</l>
+<l>elseif (Font == 'sans')</l>
+<l>    Fonts := ['Luxi Sans','DejaVu Sans','FreeSans','Arial','Liberation Sans']</l>
+<l>elseif (Font == 'serif')</l>
+<l>    Fonts := ['Times New Roman','Luxi Serif','DejaVu Serif','FreeSerif','Utopia','Liberation Serif']</l>
+<l>else</l>
+<l>    Fonts := Font</l>
+<l>endif</l>
+<l>Style := ''</l>
+<l>if (Bold == 'true')</l>
+<l>    Style := Style + 'Bold'</l>
+<l>elseif (Bold != 'false')</l>
+<l>    Exception := 'Wrong value of control parameter Bold'</l>
+<l>    throw (Exception)</l>
+<l>endif</l>
+<l>if (Slant == 'true')</l>
+<l>    Style := Style + 'Italic'</l>
+<l>elseif (Slant != 'false')</l>
+<l>    Exception := 'Wrong value of control parameter Slant'</l>
+<l>    throw (Exception)</l>
+<l>endif</l>
+<l>if (Style == '')</l>
+<l>    Style := 'Normal'</l>
+<l>endif</l>
+<l>query_font (WindowHandle, AvailableFonts)</l>
+<l>Font := ''</l>
+<l>for Fdx := 0 to |Fonts| - 1 by 1</l>
+<l>    Indices := find(AvailableFonts,Fonts[Fdx])</l>
+<l>    if (|Indices| &gt; 0)</l>
+<l>        if (Indices[0] &gt;= 0)</l>
+<l>            Font := Fonts[Fdx]</l>
+<l>            break</l>
+<l>        endif</l>
+<l>    endif</l>
+<l>endfor</l>
+<l>if (Font == '')</l>
+<l>    throw ('Wrong value of control parameter Font')</l>
+<l>endif</l>
+<l>Font := Font + '-' + Style + '-' + Size</l>
+<l>set_font (WindowHandle, Font)</l>
+<l>return ()</l>
+</body>
+<docu id="set_display_font">
+<abstract lang="en_US">This procedure sets the text font of the current window with the specified attributes Size, Bold and Slant. 
+As font, the font name or one of the strings 'mono', 'sans', 'serif' can be used.</abstract>
+<alternatives>
+<item>set_font</item>
+</alternatives>
+<attention lang="en_US">For 'mono', 'sans', and 'serif', it is assumed that at least one of the following fonts is installed on the system:
+'mono': 'Consolas', 'Menlo', 'Courier', 'Courier 10 Pitch', 'FreeMono'
+'sans': 'Luxi Sans', 'DejaVu Sans', 'FreeSans', 'Arial'
+'serif': 'Times New Roman', 'Luxi Serif', 'DejaVu Serif', 'FreeSerif', 'Utopia'</attention>
+<chapters>
+<item>Graphics</item>
+<item>Text</item>
+</chapters>
+<chapters lang="de_DE">
+<item>Graphik</item>
+<item>Text</item>
+</chapters>
+<chapters lang="en_US">
+<item>Graphics</item>
+<item>Text</item>
+</chapters>
+<example lang="en_US">dev_open_window_fit_image(Image,0 , 0, 400, 400, WindowHandle)
+set_display_font(WindowHandle, 16, 'mono', 'true', 'false')
+disp_text (WindowHandle,'Hello World!', 'window', 10, 10, 'black', [], [])
+</example>
+<keywords lang="de_DE">
+<item>Schriftart (Font) setzen</item>
+</keywords>
+<keywords lang="en_US">
+<item>set font</item>
+</keywords>
+<library lang="de_DE">MVTec Standard Procedures</library>
+<library lang="en_US">MVTec Standard Procedures</library>
+<predecessor>
+<item>dev_open_window</item>
+<item>open_window</item>
+<item>dev_open_window_fit_image</item>
+<item>dev_open_window_fit_size</item>
+</predecessor>
+<see_also>
+<item>set_font</item>
+</see_also>
+<short>Set font independent of OS</short>
+<short lang="de_DE">Set font independent of OS</short>
+<short lang="en_US">Set font independent of OS</short>
+<successor>
+<item>disp_text</item>
+<item>disp_continue_message</item>
+<item>set_tposition</item>
+<item>write_string</item>
+</successor>
+<parameters>
+<parameter id="Bold">
+<default_type>string</default_type>
+<default_value>'true'</default_value>
+<description lang="en_US">If set to 'true', a bold font is used</description>
+<multivalue>false</multivalue>
+<sem_type>attribute.value</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<value_list>
+<item>'true'</item>
+<item>'false'</item>
+</value_list>
+</parameter>
+<parameter id="Font">
+<default_type>string</default_type>
+<default_value>'mono'</default_value>
+<description lang="en_US">The font name. Either 'mono', 'sans',  'serif' or a specific font name can be used. 'mono' will be mapped to 'Courier New' on Windows, to 'courier' on Linux, and to 'Menlo' on OS X. 'sans' will be mapped to 'Arial' on Windows and OS X, and to 'helvetica' on Linux. 'serif' will be mapped to 'Times New Roman' on Windows and OS X, and to 'times' on Linux.
+</description>
+<multivalue>false</multivalue>
+<sem_type>attribute.value</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'mono'</item>
+<item>'sans'</item>
+<item>'serif'</item>
+</values>
+</parameter>
+<parameter id="Size">
+<default_type>integer</default_type>
+<default_value>16</default_value>
+<description lang="en_US">The font size on Windows systems. If Size=-1, the default of 16 is used.
+On Linux systems, ALL values are multiplied with 1.25 and then mapped to [11, 14, 17, 20, 25, 34].</description>
+<multivalue>false</multivalue>
+<sem_type>integer</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+<values>
+<item>[9, 11, 14, 16, 20, 27]</item>
+</values>
+</parameter>
+<parameter id="Slant">
+<default_type>string</default_type>
+<default_value>'false'</default_value>
+<description lang="en_US">If set to 'true', a slanted font is used</description>
+<sem_type>attribute.value</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<value_list>
+<item>'true'</item>
+<item>'false'</item>
+</value_list>
+</parameter>
+<parameter id="WindowHandle">
+<default_type>integer</default_type>
+<description lang="en_US">The window handle of the window, where the font will be set</description>
+<mixed_type>false</mixed_type>
+<sem_type>window</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_initialize_dl_dataset">
+<interface>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* Initialize an empty DLDataset.</c>
+<c>* </c>
+<l>create_dict (DLDataset)</l>
+<l>get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>set_dict_tuple (DLDataset, 'dataset_type', DatasetType)</l>
+<l>Samples := []</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_names', Classnames)</l>
+<l>if (DatasetType == 'detection' or DatasetType == 'detection_rect2')</l>
+<l>    ClassIDs := [0:|Classnames|-1]</l>
+<l>    ClassIDToClassIdx := [0:|Classnames|-1]</l>
+<l>elseif (DatasetType == 'segmentation')</l>
+<l>    get_dict_tuple (LabeltoolParams, 'set_background_id', SetBackgroundID)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'background_class_name', BackgroundClassname)</l>
+<l>    set_dict_tuple (LabeltoolParams, 'class_ids_foreground', [1:|Classnames|])</l>
+<l>    ClassIDs := [SetBackgroundID, [1:|Classnames|]]</l>
+<l>    Classnames := [BackgroundClassname, Classnames]</l>
+<l>    ClassIDToClassIdx := [0:|Classnames|-1]</l>
+<l>    get_dict_tuple (LabeltoolParams, 'segmentation_dir', SegmentationDir)</l>
+<l>    set_dict_tuple (DLDataset, 'segmentation_dir', SegmentationDir)</l>
+<l>endif</l>
+<l>set_dict_tuple (DLDataset, 'class_names', Classnames)</l>
+<l>set_dict_tuple (DLDataset, 'class_ids', ClassIDs)</l>
+<l>set_dict_tuple (LabeltoolParams, 'class_ids', ClassIDs)</l>
+<l>set_dict_tuple (LabeltoolParams, 'class_names', Classnames)</l>
+<l>set_dict_tuple (LabeltoolParams, 'class_id_to_class_idx', ClassIDToClassIdx)</l>
+<l>set_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>get_dict_tuple (LabeltoolParams, 'image_dir', ImageDir)</l>
+<l>set_dict_tuple (DLDataset, 'image_dir', ImageDir)</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_initialize_dl_dataset">
+<short lang="de_DE">Initialize a DLDataset with no samples.</short>
+<parameters>
+<parameter id="DLDataset"/>
+<parameter id="LabeltoolParams"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_gui_get_distinct_colors">
+<interface>
+<ic>
+<par name="NumColors" base_type="ctrl" dimension="0"/>
+<par name="Random" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Colors" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns distinct colors.</c>
+<c>* </c>
+<c>* We get distinct color-values first in HLS color-space.</c>
+<c>* Assumes hue [0, 2*pi), lightness [0, 1), saturation [0, 1).</c>
+<l>Hue := int(255 * real([0:NumColors - 1]) / real(NumColors))</l>
+<l>if (Random)</l>
+<l>    Hue := Hue[sort_index(rand(NumColors))]</l>
+<l>    Lightness := int((5.0 + rand(NumColors)) * 255.0 / 10.0)</l>
+<l>    Saturation := int((9.0 + rand(NumColors)) * 255.0 / 10.0)</l>
+<l>else</l>
+<l>    Lightness := int(gen_tuple_const(NumColors,0.55) * 255.0)</l>
+<l>    Saturation := int(gen_tuple_const(NumColors,0.95) * 255.0)</l>
+<l>endif</l>
+<c>* </c>
+<c>* Write colors to a 3-channel image in order to transform easier</c>
+<l>gen_image_const (HLSImageH, 'byte', 1, NumColors)</l>
+<l>gen_image_const (HLSImageL, 'byte', 1, NumColors)</l>
+<l>gen_image_const (HLSImageS, 'byte', 1, NumColors)</l>
+<l>get_region_points (HLSImageH, Rows, Columns)</l>
+<l>set_grayval (HLSImageH, Rows, Columns, Hue)</l>
+<l>set_grayval (HLSImageL, Rows, Columns, Lightness)</l>
+<l>set_grayval (HLSImageS, Rows, Columns, Saturation)</l>
+<c>* </c>
+<c>* Convert from HLS to RGB</c>
+<l>trans_to_rgb (HLSImageH, HLSImageL, HLSImageS, ImageR, ImageG, ImageB, 'hls')</l>
+<c>* </c>
+<c>* Get RGB-values and transform to Hex</c>
+<l>get_grayval (ImageR, Rows, Columns, Red)</l>
+<l>get_grayval (ImageG, Rows, Columns, Green)</l>
+<l>get_grayval (ImageB, Rows, Columns, Blue)</l>
+<l>Colors := '#' +Red $ '02x' + Green $ '02x'+  Blue $ '02x'</l>
+<c>* </c>
+<l>return ()</l>
+<c></c>
+</body>
+<docu id="dlt_gui_get_distinct_colors">
+<abstract lang="de_DE">Based on the HLS-colorspace, generate NumColors distinct colors.
+If Random is true, the returned colors are different with each call to this procedure.
+The output is a vector of NumColors [R,G,B] tuples, where the single color values are given as hex-strings.</abstract>
+<short lang="de_DE">Generates NumColors distinct colors</short>
+<parameters>
+<parameter id="Colors"/>
+<parameter id="NumColors"/>
+<parameter id="Random"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_create_tool_options">
+<interface>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="BrowseOptions" base_type="ctrl" dimension="0"/>
+<par name="BrowseChars" base_type="ctrl" dimension="0"/>
+<par name="BrowseCodes" base_type="ctrl" dimension="0"/>
+<par name="BrowseMenuMessage" base_type="ctrl" dimension="0"/>
+<par name="ToolOptions" base_type="ctrl" dimension="0"/>
+<par name="ToolChars" base_type="ctrl" dimension="0"/>
+<par name="ToolCodes" base_type="ctrl" dimension="0"/>
+<par name="ToolMenuMessage" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>*</c>
+<c>* Initialize arrays for different options and their keyboard-keys.</c>
+<c>*</c>
+<c>* Options:     Name of the option.</c>
+<c>* Chars:       Keyboard-char of the option (either specify a char or code).</c>
+<c>* Codes:       Keyboard-code of the option (either specify a char or code).</c>
+<c>* MenuMessage: Instruction string to be displayed for this option.</c>
+<c>*</c>
+<c>* Browse* are the settings for the browser.</c>
+<l>BrowseOptions := []</l>
+<l>BrowseChars := []</l>
+<l>BrowseCodes := []</l>
+<l>BrowseMenuMessage := []</l>
+<c>*</c>
+<c>* There are some optional functionalities. Set the option to false if it should not be available.</c>
+<l>CopyPreviousAnnotationsOn := true</l>
+<l>AddNewEllipticRegionOn := false</l>
+<l>AddNewRectangle2On := false</l>
+<l>AddRectangleByPolygon := false</l>
+<l>get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>if (DatasetType == 'segmentation')</l>
+<l>    AddNewEllipticRegionOn := true</l>
+<l>else</l>
+<l>    AddRectangleByPolygon := true</l>
+<l>    get_dict_tuple (LabeltoolParams, 'region_type', RegionType)</l>
+<l>    if (RegionType == 'rectangle2')</l>
+<l>        AddNewRectangle2On := true</l>
+<l>    endif</l>
+<l>endif</l>
+<c>* Add browse options:</c>
+<l>NumBrowseOptions := 0</l>
+<c>*</c>
+<c>* Go to the next image.</c>
+<l>BrowseOptions[NumBrowseOptions]     := 'GoToNext'</l>
+<l>BrowseChars[NumBrowseOptions]       := ''</l>
+<l>BrowseCodes[NumBrowseOptions]       := 'right'</l>
+<l>BrowseMenuMessage[NumBrowseOptions] := 'next image'</l>
+<l>NumBrowseOptions := NumBrowseOptions + 1</l>
+<c>*</c>
+<c>* Go to the previous image.</c>
+<l>BrowseOptions[NumBrowseOptions]     := 'GoToPrevious'</l>
+<l>BrowseChars[NumBrowseOptions]       := ''</l>
+<l>BrowseCodes[NumBrowseOptions]       := 'left'</l>
+<l>BrowseMenuMessage[NumBrowseOptions] := 'previous image'</l>
+<l>NumBrowseOptions := NumBrowseOptions + 1</l>
+<c>*</c>
+<c>* Jump to image by index.</c>
+<l>BrowseOptions[NumBrowseOptions]     := 'Jump'</l>
+<l>BrowseChars[NumBrowseOptions]       := 'j'</l>
+<l>BrowseCodes[NumBrowseOptions]       := ''</l>
+<l>BrowseMenuMessage[NumBrowseOptions] := 'jump to image by index'</l>
+<l>NumBrowseOptions := NumBrowseOptions + 1</l>
+<c>*</c>
+<c>* Change annotations of current image.</c>
+<l>BrowseOptions[NumBrowseOptions]     := 'ChangeAnnotations'</l>
+<l>BrowseChars[NumBrowseOptions]       := 'a'</l>
+<l>BrowseCodes[NumBrowseOptions]       := ''</l>
+<l>BrowseMenuMessage[NumBrowseOptions] := 'add or change annotations'</l>
+<l>NumBrowseOptions := NumBrowseOptions + 1</l>
+<c>*</c>
+<l>if (CopyPreviousAnnotationsOn)</l>
+<c>    * Go to the previous image without annotations.</c>
+<l>    BrowseOptions[NumBrowseOptions]     := 'PreviousAnnotations'</l>
+<l>    BrowseChars[NumBrowseOptions]       := 'p'</l>
+<l>    BrowseCodes[NumBrowseOptions]       := ''</l>
+<l>    BrowseMenuMessage[NumBrowseOptions] := 'copy annotations from previous image'</l>
+<l>    NumBrowseOptions := NumBrowseOptions + 1</l>
+<l>endif</l>
+<c>* </c>
+<c>* Remove labels for this image.</c>
+<l>BrowseOptions[NumBrowseOptions]     := 'RemoveLabelOfThisImage'</l>
+<l>BrowseChars[NumBrowseOptions]       := 'x'</l>
+<l>BrowseCodes[NumBrowseOptions]       := ''</l>
+<l>BrowseMenuMessage[NumBrowseOptions] := 'unlabel image'</l>
+<l>NumBrowseOptions := NumBrowseOptions + 1</l>
+<c>* </c>
+<c>* Stop the program --&gt; debug.</c>
+<l>BrowseOptions[NumBrowseOptions]     := 'Stop'</l>
+<l>BrowseChars[NumBrowseOptions]       := 's'</l>
+<l>BrowseCodes[NumBrowseOptions]       := ''</l>
+<l>BrowseMenuMessage[NumBrowseOptions] := 'stop program -&gt; debug'</l>
+<l>NumBrowseOptions := NumBrowseOptions + 1</l>
+<c>*</c>
+<c>* Save and end the program.</c>
+<l>BrowseOptions[NumBrowseOptions]     := 'EndProgram'</l>
+<l>BrowseChars[NumBrowseOptions]       := 'd'</l>
+<l>BrowseCodes[NumBrowseOptions]       := ''</l>
+<l>BrowseMenuMessage[NumBrowseOptions] := 'done -&gt; save annotations &amp; end program'</l>
+<l>NumBrowseOptions := NumBrowseOptions + 1</l>
+<c>*</c>
+<c>* Collect the MenuMessage and format nicely.</c>
+<l>MaxLength := max(strlen(BrowseChars + BrowseCodes))</l>
+<l>for Idx := 0 to NumBrowseOptions - 1 by 1</l>
+<l>    Space := '' + (MaxLength - strlen(BrowseChars[Idx] + BrowseCodes[Idx]))</l>
+<l>    BrowseMenuMessage[Idx] := BrowseChars[Idx] + BrowseCodes[Idx] +': ' + ''$Space + BrowseMenuMessage[Idx]    </l>
+<l>endfor</l>
+<c>*</c>
+<c>* Tool* contain the options for label_detection.</c>
+<l>ToolOptions := []</l>
+<l>ToolChars := []</l>
+<l>ToolCodes := []</l>
+<l>ToolMenuMessage := []</l>
+<c>*</c>
+<c>* Add tool options:</c>
+<l>NumToolOptions := 0</l>
+<c>*</c>
+<c>* Go to previous annotation.</c>
+<l>ToolOptions[NumToolOptions]     := 'PreviousAnnotation'</l>
+<l>ToolChars[NumToolOptions]       := ''</l>
+<l>ToolCodes[NumToolOptions]       := 'left'</l>
+<l>ToolMenuMessage[NumToolOptions] := 'previous annotation'</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<c>* Go to next annotation.</c>
+<l>ToolOptions[NumToolOptions]     := 'NextAnnotation'</l>
+<l>ToolChars[NumToolOptions]       := ''</l>
+<l>ToolCodes[NumToolOptions]       := 'right'</l>
+<l>ToolMenuMessage[NumToolOptions] := 'next annotation'</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<c>* Select annotation by click.</c>
+<l>ToolOptions[NumToolOptions]     := 'SelectAnnotation'</l>
+<l>ToolChars[NumToolOptions]       := 'y'</l>
+<l>ToolCodes[NumToolOptions]       := ''</l>
+<l>ToolMenuMessage[NumToolOptions] := 'select annotation by click'</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<c>* Add new annotation.</c>
+<l>ToolOptions[NumToolOptions]     := 'AddNewObject'</l>
+<l>ToolChars[NumToolOptions]       := 'n'</l>
+<l>ToolCodes[NumToolOptions]       := ''</l>
+<l>if (not AddNewRectangle2On)</l>
+<l>    ToolMenuMessage[NumToolOptions] := 'add new annotation'</l>
+<l>else</l>
+<l>    ToolMenuMessage[NumToolOptions] := 'add new rectangle1 annotation'</l>
+<l>endif</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<l>if (AddNewEllipticRegionOn)</l>
+<c>    * Add new elliptic annotation.</c>
+<l>    ToolOptions[NumToolOptions]     := 'AddNewEllipticObject'</l>
+<l>    ToolChars[NumToolOptions]       := 'e'</l>
+<l>    ToolCodes[NumToolOptions]       := ''</l>
+<l>    ToolMenuMessage[NumToolOptions] := 'add new elliptic annotation'</l>
+<l>    NumToolOptions := NumToolOptions + 1</l>
+<l>endif</l>
+<c>*</c>
+<l>if (AddNewRectangle2On)</l>
+<c>    * Add new rectangle2 annotation.</c>
+<l>    ToolOptions[NumToolOptions]     := 'AddNewRectangle2'</l>
+<l>    ToolChars[NumToolOptions]       := 'm'</l>
+<l>    ToolCodes[NumToolOptions]       := ''</l>
+<l>    ToolMenuMessage[NumToolOptions] := 'add new rectangle2 annotation'</l>
+<l>    NumToolOptions := NumToolOptions + 1</l>
+<c>    *</c>
+<c>    * Change orientation by 90°.</c>
+<l>    ToolOptions[NumToolOptions]     := 'ChangeOrientation'</l>
+<l>    ToolChars[NumToolOptions]       := 'o'</l>
+<l>    ToolCodes[NumToolOptions]       := ''</l>
+<l>    ToolMenuMessage[NumToolOptions] := 'change orientation by 90°'</l>
+<l>    NumToolOptions := NumToolOptions + 1</l>
+<l>endif</l>
+<l>if (AddRectangleByPolygon)</l>
+<c>    *</c>
+<c>    * Add rectangle using polygon.</c>
+<l>    ToolOptions[NumToolOptions]     := 'AddRectangleByPolygon'</l>
+<l>    ToolChars[NumToolOptions]       := 'p'</l>
+<l>    ToolCodes[NumToolOptions]       := ''</l>
+<l>    ToolMenuMessage[NumToolOptions] := 'add rectangle by polygon'</l>
+<l>    NumToolOptions := NumToolOptions + 1</l>
+<l>endif</l>
+<c>* Remove current annotation.</c>
+<l>ToolOptions[NumToolOptions]     := 'RemoveAnnotation'</l>
+<l>ToolChars[NumToolOptions]       := 'x'</l>
+<l>ToolCodes[NumToolOptions]       := ''</l>
+<l>ToolMenuMessage[NumToolOptions] := 'remove current annotation'</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<c>* Change annotation region.</c>
+<l>ToolOptions[NumToolOptions]     := 'ChangeRegion'</l>
+<l>ToolChars[NumToolOptions]       := 'r'</l>
+<l>ToolCodes[NumToolOptions]       := ''</l>
+<l>ToolMenuMessage[NumToolOptions] := 'change annotation region'</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<c>* Change annotation type.</c>
+<l>ToolOptions[NumToolOptions]     := 'ChangeClass'</l>
+<l>ToolChars[NumToolOptions]       := 'c'</l>
+<l>ToolCodes[NumToolOptions]       := ''</l>
+<l>ToolMenuMessage[NumToolOptions] := 'change annotation class'</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<c>* Stop program --&gt; debug.</c>
+<l>ToolOptions[NumToolOptions]     := 'Stop'</l>
+<l>ToolChars[NumToolOptions]       := 's'</l>
+<l>ToolCodes[NumToolOptions]       := ''</l>
+<l>ToolMenuMessage[NumToolOptions] := 'stop program -&gt; debug'</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<c>* Save this sample and browse.</c>
+<l>ToolOptions[NumToolOptions]     := 'SaveAnnotation'</l>
+<l>ToolChars[NumToolOptions]       := 'd'</l>
+<l>ToolCodes[NumToolOptions]       := ''</l>
+<l>ToolMenuMessage[NumToolOptions] := 'done -&gt; save &amp; browse'</l>
+<l>NumToolOptions := NumToolOptions + 1</l>
+<c>*</c>
+<c>* Collect the MenuMessage and format nicely.</c>
+<l>MaxLength := max(strlen(ToolChars + ToolCodes))</l>
+<l>for Idx := 0 to NumToolOptions - 1 by 1</l>
+<l>    Space := '' + (MaxLength - strlen(ToolChars[Idx] + ToolCodes[Idx]))</l>
+<l>    ToolMenuMessage[Idx] := ToolChars[Idx] + ToolCodes[Idx] +': ' + ''$Space + ToolMenuMessage[Idx]    </l>
+<l>endfor</l>
+<c>* </c>
+<l>return ()</l>
+<c></c>
+</body>
+<docu id="dlt_create_tool_options">
+<parameters>
+<parameter id="BrowseChars"/>
+<parameter id="BrowseCodes"/>
+<parameter id="BrowseMenuMessage"/>
+<parameter id="BrowseOptions"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="ToolChars"/>
+<parameter id="ToolCodes"/>
+<parameter id="ToolMenuMessage"/>
+<parameter id="ToolOptions"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_get_labeltool_params_for_browse">
+<interface>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="TopicColors" base_type="ctrl" dimension="0"/>
+<par name="ClassColors" base_type="ctrl" dimension="0"/>
+<par name="ImageWindowHandle" base_type="ctrl" dimension="0"/>
+<par name="ZoomWindowHandle" base_type="ctrl" dimension="0"/>
+<par name="InstructionWindowHandle" base_type="ctrl" dimension="0"/>
+<par name="MessageWindowHandle" base_type="ctrl" dimension="0"/>
+<par name="WaitSeconds" base_type="ctrl" dimension="0"/>
+<par name="DLDatasetFile" base_type="ctrl" dimension="0"/>
+<par name="DatasetType" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* Get some parameters that are necessary for the browse_dataset procedure</c>
+<l>get_dict_tuple (LabeltoolParams, 'window_topic_colors', TopicColors)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_colors', ClassColors)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_image', ImageWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_zoom', ZoomWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_instruction', InstructionWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_message', MessageWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'wait_seconds', WaitSeconds)</l>
+<l>get_dict_tuple (LabeltoolParams, 'dl_dataset_file', DLDatasetFile)</l>
+<l>get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_get_labeltool_params_for_browse">
+<short lang="de_DE">Get labeltool parameters that are necessary for the browse dataset procedure.</short>
+<parameters>
+<parameter id="ClassColors"/>
+<parameter id="DLDatasetFile"/>
+<parameter id="DatasetType"/>
+<parameter id="ImageWindowHandle"/>
+<parameter id="InstructionWindowHandle"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="MessageWindowHandle"/>
+<parameter id="TopicColors"/>
+<parameter id="WaitSeconds"/>
+<parameter id="ZoomWindowHandle"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dev_display_dlt_menu_message">
+<interface>
+<ic>
+<par name="MessageWindowHandle" base_type="ctrl" dimension="0"/>
+<par name="Color" base_type="ctrl" dimension="0"/>
+<par name="DisplayMessage" base_type="ctrl" dimension="0"/>
+<par name="DisplayMode" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure displays a message in the message window.</c>
+<c>* </c>
+<l>dev_set_window (MessageWindowHandle)</l>
+<l>set_display_font (MessageWindowHandle, 16, 'mono', 'true', 'false')</l>
+<l>dev_update_on()</l>
+<l>get_part (MessageWindowHandle, PartRow1, PartCol1, PartRow2, PartCol2)</l>
+<l>dev_update_off ()</l>
+<l>gen_rectangle1 (Rectangle, PartRow1, PartCol1, PartRow2, PartCol2)</l>
+<l>dev_clear_window ()</l>
+<l>dev_set_color (Color)</l>
+<l>dev_set_draw ('fill')</l>
+<l>dev_display (Rectangle)</l>
+<l>dev_set_color ('black')</l>
+<c>* </c>
+<l>if (DisplayMode == 'centered')</l>
+<c>    * If DisplayMessage contains more than 1 string, the strings are displayed from top to bottom and horizontally centered.</c>
+<l>    for Index := 0 to |DisplayMessage| - 1 by 1</l>
+<l>        get_string_extents (MessageWindowHandle, DisplayMessage[Index], Ascent, Descent, Width, Height)</l>
+<l>        set_tposition (MessageWindowHandle, (Index + 1)*(PartRow2-PartRow1+1)/(|DisplayMessage| + 1) - Height/2, (PartCol2-PartCol1+1-Width)/2)</l>
+<l>        write_string (MessageWindowHandle, DisplayMessage[Index])</l>
+<l>    endfor</l>
+<l>elseif (DisplayMode == 'show_image_status')</l>
+<c>    * This mode only supports a DisplayMessage of length 5.</c>
+<l>    if (|DisplayMessage| != 5)</l>
+<l>        throw ('The current DisplayMode only supports a DisplayMessage of length 5.')</l>
+<l>    endif</l>
+<c>    * Display image idx.</c>
+<l>    get_string_extents (MessageWindowHandle, DisplayMessage[0], Ascent, Descent, Width, Height)</l>
+<l>    set_tposition (MessageWindowHandle, (PartRow2-PartRow1+1)/3 - Height/2, 10)</l>
+<l>    write_string (MessageWindowHandle, DisplayMessage[0])</l>
+<c>    * Display image name.</c>
+<l>    get_string_extents (MessageWindowHandle, DisplayMessage[3], Ascent, Descent, Width, _)</l>
+<l>    CenterOffset := Width</l>
+<l>    get_string_extents (MessageWindowHandle, DisplayMessage[1], Ascent, Descent, Width, Height)</l>
+<l>    set_tposition (MessageWindowHandle, (PartRow2-PartRow1+1)/3 - Height/2, (PartCol2-PartCol1+1)/2 - CenterOffset)</l>
+<l>    write_string (MessageWindowHandle, DisplayMessage[1])</l>
+<c>    * Display other strings in the line below.</c>
+<c>    * First one on the left side.</c>
+<l>    get_string_extents (MessageWindowHandle, DisplayMessage[2], Ascent, Descent, Width, Height)</l>
+<l>    set_tposition (MessageWindowHandle, 2*(PartRow2-PartRow1+1)/3- Height/2, 10)</l>
+<l>    write_string (MessageWindowHandle, DisplayMessage[2])</l>
+<c>    * Second one (labeled true/false) in the middle.</c>
+<l>    get_string_extents (MessageWindowHandle, DisplayMessage[3], Ascent, Descent, Width, Height)</l>
+<l>    set_tposition (MessageWindowHandle, 2*(PartRow2-PartRow1+1)/3- Height/2, (PartCol2-PartCol1+1)/2 - CenterOffset)</l>
+<l>    write_string (MessageWindowHandle, DisplayMessage[3])</l>
+<c>    * Third one on the right side.</c>
+<l>    get_string_extents (MessageWindowHandle, DisplayMessage[4], Ascent, Descent, Width, Height)</l>
+<l>    set_tposition (MessageWindowHandle, 2*(PartRow2-PartRow1+1)/3- Height/2, (PartCol2-PartCol1+1) - Width - 10)</l>
+<l>    write_string (MessageWindowHandle, DisplayMessage[4])</l>
+<l>else</l>
+<l>    throw ('DisplayMode is not supported, please use \'centered\' or \'show_image_status\'.')</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dev_display_dlt_menu_message">
+<parameters>
+<parameter id="Color"/>
+<parameter id="DisplayMessage"/>
+<parameter id="DisplayMode"/>
+<parameter id="MessageWindowHandle"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="list_image_files">
+<interface>
+<ic>
+<par name="ImageDirectory" base_type="ctrl" dimension="0"/>
+<par name="Extensions" base_type="ctrl" dimension="0"/>
+<par name="Options" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="ImageFiles" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns all files in a given directory</c>
+<c>* with one of the suffixes specified in Extensions.</c>
+<c>* </c>
+<c>* Input parameters:</c>
+<c>* ImageDirectory: Directory or a tuple of directories with images.</c>
+<c>*    If a directory is not found locally, the respective directory</c>
+<c>*    is searched under %HALCONIMAGES%/ImageDirectory.</c>
+<c>*    See the Installation Guide for further information</c>
+<c>*    in case %HALCONIMAGES% is not set.</c>
+<c>* Extensions: A string tuple containing the extensions to be found</c>
+<c>*    e.g. ['png','tif',jpg'] or others</c>
+<c>* If Extensions is set to 'default' or the empty string '',</c>
+<c>*    all image suffixes supported by HALCON are used.</c>
+<c>* Options: as in the operator list_files, except that the 'files'</c>
+<c>*    option is always used. Note that the 'directories' option</c>
+<c>*    has no effect but increases runtime, because only files are</c>
+<c>*    returned.</c>
+<c>* </c>
+<c>* Output parameter:</c>
+<c>* ImageFiles: A tuple of all found image file names</c>
+<c>* </c>
+<l>if (Extensions == [] or Extensions == '' or Extensions == 'default')</l>
+<l>    Extensions := ['ima','tif','tiff','gif','bmp','jpg','jpeg','jp2','jxr','png','pcx','ras','xwd','pbm','pnm','pgm','ppm']</l>
+<c>    * </c>
+<l>endif</l>
+<l>ImageFiles := []</l>
+<c>* Loop through all given image directories.</c>
+<l>for ImageDirectoryIndex := 0 to |ImageDirectory| - 1 by 1</l>
+<l>    ImageFilesTmp := []</l>
+<l>    CurrentImageDirectory := ImageDirectory[ImageDirectoryIndex]</l>
+<l>    if (CurrentImageDirectory == '')</l>
+<l>        CurrentImageDirectory := '.'</l>
+<l>    endif</l>
+<l>    get_system ('image_dir', HalconImages)</l>
+<l>    get_system ('operating_system', OS)</l>
+<l>    if (OS{0:2} == 'Win')</l>
+<l>        HalconImages := split(HalconImages,';')</l>
+<l>    else</l>
+<l>        HalconImages := split(HalconImages,':')</l>
+<l>    endif</l>
+<l>    Directories := CurrentImageDirectory</l>
+<l>    for Index := 0 to |HalconImages| - 1 by 1</l>
+<l>        Directories := [Directories,HalconImages[Index] + '/' + CurrentImageDirectory]</l>
+<l>    endfor</l>
+<l>    tuple_strlen (Directories, Length)</l>
+<l>    tuple_gen_const (|Length|, false, NetworkDrive)</l>
+<l>    if (OS{0:2} == 'Win')</l>
+<l>        for Index := 0 to |Length| - 1 by 1</l>
+<l>            if (strlen(Directories[Index]) &gt; 1)</l>
+<l>                tuple_str_first_n (Directories[Index], 1, Substring)</l>
+<l>                if (Substring == '//' or Substring == '\\\\')</l>
+<l>                    NetworkDrive[Index] := true</l>
+<l>                endif</l>
+<l>            endif</l>
+<l>        endfor</l>
+<l>    endif</l>
+<l>    ImageFilesTmp := []</l>
+<l>    for Index := 0 to |Directories| - 1 by 1</l>
+<l>        file_exists (Directories[Index], FileExists)</l>
+<l>        if (FileExists)</l>
+<l>            list_files (Directories[Index], ['files',Options], AllFiles)</l>
+<l>            ImageFilesTmp := []</l>
+<l>            for i := 0 to |Extensions| - 1 by 1</l>
+<l>                tuple_regexp_select (AllFiles, ['.*' + Extensions[i] + '$','ignore_case'], Selection)</l>
+<l>                ImageFilesTmp := [ImageFilesTmp,Selection]</l>
+<l>            endfor</l>
+<l>            tuple_regexp_replace (ImageFilesTmp, ['\\\\','replace_all'], '/', ImageFilesTmp)</l>
+<l>            if (NetworkDrive[Index])</l>
+<l>                tuple_regexp_replace (ImageFilesTmp, ['//','replace_all'], '/', ImageFilesTmp)</l>
+<l>                ImageFilesTmp := '/' + ImageFilesTmp</l>
+<l>            else</l>
+<l>                tuple_regexp_replace (ImageFilesTmp, ['//','replace_all'], '/', ImageFilesTmp)</l>
+<l>            endif</l>
+<l>            break</l>
+<l>        endif</l>
+<l>    endfor</l>
+<c>    * Concatenate the output image paths.</c>
+<l>    ImageFiles := [ImageFiles,ImageFilesTmp]</l>
+<l>endfor</l>
+<l>return ()</l>
+</body>
+<docu id="list_image_files">
+<abstract lang="en_US">This procedure returns all files in a given directory ImageDirectory with one of the suffixes specified in Extensions.
+
+It is possible to use a tuple with multiple directories as input ImageDirectory. If a directory is not found locally, the respective directory is searched under %HALCONIMAGES%/ImageDirectory. See the Installation Guide for further information in case %HALCONIMAGES% is not set.
+If Extensions is set to 'default' or the empty string '', all image suffixes supported by HALCON are used.
+The parameter Options is used as in the operator list_files (see list_files for details), except that the 'files' option is always used. Note that the 'directories' option has no effect but increases runtime, because only files are returned.</abstract>
+<alternatives>
+<item>list_files</item>
+</alternatives>
+<chapters>
+<item>File</item>
+</chapters>
+<chapters lang="de_DE">
+<item>Datei</item>
+<item>Sonstiges</item>
+</chapters>
+<chapters lang="en_US">
+<item>File</item>
+<item>Misc</item>
+</chapters>
+<example lang="en_US">list_image_files ('.',[] ,[] , ImageFiles)
+for Index := 1 to |ImageFiles|  by 1
+    read_image (Image,ImageFiles[Index-1])
+*     do something
+endfor</example>
+<keywords lang="de_DE">
+<item>Bilddateien auflisten</item>
+</keywords>
+<keywords lang="en_US">
+<item>list image files</item>
+</keywords>
+<library lang="de_DE">MVTec Standard Procedures</library>
+<library lang="en_US">MVTec Standard Procedures</library>
+<predecessor>
+<item>list_files</item>
+</predecessor>
+<see_also>
+<item>list_files</item>
+</see_also>
+<short>Get all image files under the given path</short>
+<short lang="de_DE">Get all image files under the given path</short>
+<short lang="en_US">Get all image files under the given path</short>
+<successor>
+<item>read_image</item>
+</successor>
+<parameters>
+<parameter id="Extensions">
+<default_type>string</default_type>
+<default_value>'default'</default_value>
+<description lang="en_US">A string tuple containing the extensions to be found e.g. ['png','tif',jpg'] or others</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'ima'</item>
+<item>'bmp'</item>
+<item>'jpg'</item>
+<item>'png'</item>
+<item>'tiff'</item>
+<item>'tif'</item>
+<item>'gif'</item>
+<item>'jpeg'</item>
+<item>'pcx'</item>
+<item>'pgm'</item>
+<item>'ppm'</item>
+<item>'pbm'</item>
+<item>'xwd'</item>
+<item>'pnm'</item>
+</values>
+</parameter>
+<parameter id="ImageDirectory">
+<default_type>string</default_type>
+<description lang="en_US">The image directory</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>filename.dir</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="ImageFiles">
+<default_type>string</default_type>
+<description lang="en_US">A tuple of all found image file names</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>filename.read</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="Options">
+<default_type>string</default_type>
+<default_value>[]</default_value>
+<description lang="en_US">Processing options</description>
+<multivalue>optional</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'recursive'</item>
+<item>'follow_links'</item>
+<item>'max_depth 5'</item>
+</values>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_get_sample_by_image_filename">
+<interface>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+<par name="ImageFilename" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="SampleIndex" base_type="ctrl" dimension="0"/>
+<par name="ImageID" base_type="ctrl" dimension="0"/>
+<par name="SampleExists" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure looks if an sample for the image already exists and returns it.</c>
+<c>* If no sample for the current image is found, a new one is created and returned.</c>
+<c>* </c>
+<l>get_dict_tuple (LabeltoolParams, 'max_image_id', ImageID)</l>
+<l>get_dict_tuple (LabeltoolParams, 'last_sample_index', LastSampleIndex)</l>
+<l>get_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>SampleExists := false</l>
+<c>* </c>
+<c>* Look for sample: First, a quick search near SampleIndex is done.</c>
+<c>* If the sample is not found, search the sample in the whole dataset.</c>
+<l>TargetSampleIndices.at(0) := [max2(0, LastSampleIndex - 5): min2(|Samples| - 1, LastSampleIndex + 5)]</l>
+<l>TargetSampleIndices.at(1) := [0:|Samples| - 1]</l>
+<l>for SearchIndex := 0 to TargetSampleIndices.length() - 1 by 1</l>
+<l>    TargetSamples := Samples[TargetSampleIndices.at(SearchIndex)]</l>
+<l>    for Index := 0 to |TargetSamples| - 1 by 1</l>
+<l>        get_dict_tuple (TargetSamples[Index], 'image_file_name', ImageFilenameTmp)</l>
+<l>        if (ImageFilename == ImageFilenameTmp)</l>
+<c>            * For this image, there already exists a sample --&gt; use this one.</c>
+<l>            SampleIndex := TargetSampleIndices.at(SearchIndex)[Index]</l>
+<l>            Sample := Samples[SampleIndex]</l>
+<l>            get_dict_tuple (Sample, 'image_id', ImageID)</l>
+<l>            get_dict_tuple (Sample, 'image_file_name', ImageFilenameOut)</l>
+<l>            SampleExists := true</l>
+<l>            break</l>
+<l>        endif</l>
+<l>    endfor</l>
+<c>    * </c>
+<l>    if (SampleExists)</l>
+<l>        break</l>
+<l>    endif</l>
+<l>endfor</l>
+<c>* </c>
+<l>if (not SampleExists)</l>
+<c>    * For this image, no sample exists --&gt; create an empty sample.</c>
+<l>    ImageID := ImageID + 1</l>
+<l>    SampleIndex := |Samples|</l>
+<l>    create_dict (Sample)</l>
+<l>    set_dict_tuple (Sample, 'image_id', ImageID)</l>
+<l>    set_dict_tuple (Sample, 'image_file_name', ImageFilename)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>    if (DatasetType == 'detection')</l>
+<l>        NeededDLSampleKeys := ['bbox_row1', 'bbox_col1', 'bbox_row2', 'bbox_col2', 'bbox_label_id']</l>
+<l>        for Index := 0 to |NeededDLSampleKeys| - 1 by 1</l>
+<l>            set_dict_tuple (Sample, NeededDLSampleKeys[Index], [])</l>
+<l>        endfor</l>
+<l>    elseif (DatasetType == 'segmentation')</l>
+<l>        set_dict_tuple (Sample, 'segmentation_file_name', '')</l>
+<l>    endif</l>
+<l>endif</l>
+<c>* </c>
+<c>* Set SampleIndex to support a quick search.</c>
+<l>set_dict_tuple (LabeltoolParams, 'last_sample_index', SampleIndex)</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_get_sample_by_image_filename">
+<parameters>
+<parameter id="DLDataset"/>
+<parameter id="ImageFilename"/>
+<parameter id="ImageID"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="Sample"/>
+<parameter id="SampleExists"/>
+<parameter id="SampleIndex"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dev_display_dlt_sample_annotations">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Display all annotations of a sample.</c>
+<c>*</c>
+<c>* Get some parameters.</c>
+<l>get_dict_tuple (LabeltoolParams, 'class_id_to_class_idx', ClassIDToClassIdx)</l>
+<l>get_dict_tuple (LabeltoolParams, 'region_type', RegionType)</l>
+<l>get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_ids', ClassIDs)</l>
+<c>*</c>
+<c>* Get regions and class labels.</c>
+<l>if (DatasetType == 'segmentation')</l>
+<l>    get_dict_tuple (LabeltoolParams, 'segmentation_dir', SegmentationDir)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'class_ids_foreground', ClassIDsForeground)</l>
+<l>    dlt_get_sample_annotations_segmentation (Annotations, Sample, SegmentationDir, ClassIDsForeground, ClassIDs, ClassIDToClassIdx, LabelIDs, NumAnnotations)</l>
+<l>elseif (DatasetType == 'detection' or DatasetType == 'detection_rect2')</l>
+<c>    * Detection.</c>
+<l>    dlt_get_sample_annotations_detection (Annotations, Sample, RegionType, LabelIDs, NumAnnotations)</l>
+<l>    dlt_get_sample_orientations_arrows (OrientationArrows, DatasetType, Sample)</l>
+<l>endif</l>
+<c>*</c>
+<l>dev_display_dlt_annotations (Image, Annotations, LabeltoolParams, LabelIDs, [], false, true)</l>
+<l>if (DatasetType == 'detection_rect2' and NumAnnotations &gt; 0)</l>
+<l>    dev_display_dlt_annotations (Image, OrientationArrows, LabeltoolParams, LabelIDs, [], false, false)</l>
+<l>endif</l>
+<c>*</c>
+<l>return ()</l>
+</body>
+<docu id="dev_display_dlt_sample_annotations">
+<parameters>
+<parameter id="Image"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="disp_message">
+<interface>
+<ic>
+<par name="WindowHandle" base_type="ctrl" dimension="0"/>
+<par name="String" base_type="ctrl" dimension="0"/>
+<par name="CoordSystem" base_type="ctrl" dimension="0"/>
+<par name="Row" base_type="ctrl" dimension="0"/>
+<par name="Column" base_type="ctrl" dimension="0"/>
+<par name="Color" base_type="ctrl" dimension="0"/>
+<par name="Box" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure displays text in a graphics window.</c>
+<c>* </c>
+<c>* Input parameters:</c>
+<c>* WindowHandle: The WindowHandle of the graphics window, where</c>
+<c>*    the message should be displayed</c>
+<c>* String: A tuple of strings containing the text message to be displayed</c>
+<c>* CoordSystem: If set to 'window', the text position is given</c>
+<c>*    with respect to the window coordinate system.</c>
+<c>*    If set to 'image', image coordinates are used.</c>
+<c>*    (This may be useful in zoomed images.)</c>
+<c>* Row: The row coordinate of the desired text position</c>
+<c>*    A tuple of values is allowed to display text at different</c>
+<c>*    positions.</c>
+<c>* Column: The column coordinate of the desired text position</c>
+<c>*    A tuple of values is allowed to display text at different</c>
+<c>*    positions.</c>
+<c>* Color: defines the color of the text as string.</c>
+<c>*    If set to [], '' or 'auto' the currently set color is used.</c>
+<c>*    If a tuple of strings is passed, the colors are used cyclically...</c>
+<c>*    - if |Row| == |Column| == 1: for each new textline</c>
+<c>*    = else for each text position.</c>
+<c>* Box: If Box[0] is set to 'true', the text is written within an orange box.</c>
+<c>*      If set to' false', no box is displayed.</c>
+<c>*      If set to a color string (e.g. 'white', '#FF00CC', etc.),</c>
+<c>*        the text is written in a box of that color.</c>
+<c>*      An optional second value for Box (Box[1]) controls if a shadow is displayed:</c>
+<c>*        'true' -&gt; display a shadow in a default color</c>
+<c>*        'false' -&gt; display no shadow</c>
+<c>*        otherwise -&gt; use given string as color string for the shadow color</c>
+<c>* </c>
+<c>* It is possible to display multiple text strings in a single call.</c>
+<c>* In this case, some restrictions apply:</c>
+<c>* - Multiple text positions can be defined by specifying a tuple</c>
+<c>*   with multiple Row and/or Column coordinates, i.e.:</c>
+<c>*   - |Row| == n, |Column| == n</c>
+<c>*   - |Row| == n, |Column| == 1</c>
+<c>*   - |Row| == 1, |Column| == n</c>
+<c>* - If |Row| == |Column| == 1,</c>
+<c>*   each element of String is display in a new textline.</c>
+<c>* - If multiple positions or specified, the number of Strings</c>
+<c>*   must match the number of positions, i.e.:</c>
+<c>*   - Either |String| == n (each string is displayed at the</c>
+<c>*                           corresponding position),</c>
+<c>*   - or     |String| == 1 (The string is displayed n times).</c>
+<c>* </c>
+<c>* </c>
+<c>* Convert the parameters for disp_text.</c>
+<l>if (Row == [] or Column == [])</l>
+<l>    return ()</l>
+<l>endif</l>
+<l>if (Row == -1)</l>
+<l>    Row := 12</l>
+<l>endif</l>
+<l>if (Column == -1)</l>
+<l>    Column := 12</l>
+<l>endif</l>
+<c>* </c>
+<c>* Convert the parameter Box to generic parameters.</c>
+<l>GenParamName := []</l>
+<l>GenParamValue := []</l>
+<l>if (|Box| &gt; 0)</l>
+<l>    if (Box[0] == 'false')</l>
+<c>        * Display no box</c>
+<l>        GenParamName := [GenParamName,'box']</l>
+<l>        GenParamValue := [GenParamValue,'false']</l>
+<l>    elseif (Box[0] != 'true')</l>
+<c>        * Set a color other than the default.</c>
+<l>        GenParamName := [GenParamName,'box_color']</l>
+<l>        GenParamValue := [GenParamValue,Box[0]]</l>
+<l>    endif</l>
+<l>endif</l>
+<l>if (|Box| &gt; 1)</l>
+<l>    if (Box[1] == 'false')</l>
+<c>        * Display no shadow.</c>
+<l>        GenParamName := [GenParamName,'shadow']</l>
+<l>        GenParamValue := [GenParamValue,'false']</l>
+<l>    elseif (Box[1] != 'true')</l>
+<c>        * Set a shadow color other than the default.</c>
+<l>        GenParamName := [GenParamName,'shadow_color']</l>
+<l>        GenParamValue := [GenParamValue,Box[1]]</l>
+<l>    endif</l>
+<l>endif</l>
+<c>* Restore default CoordSystem behavior.</c>
+<l>if (CoordSystem != 'window')</l>
+<l>    CoordSystem := 'image'</l>
+<l>endif</l>
+<c>* </c>
+<l>if (Color == '')</l>
+<c>    * disp_text does not accept an empty string for Color.</c>
+<l>    Color := []</l>
+<l>endif</l>
+<c>* </c>
+<l>disp_text (WindowHandle, String, CoordSystem, Row, Column, Color, GenParamName, GenParamValue)</l>
+<l>return ()</l>
+</body>
+<docu id="disp_message">
+<abstract lang="en_US">This procedure displays text in a graphics window WindowHandle at the position (Row,Column).
+
+If only a single position is defined, one text line is displayed for each element of String. Also, '\n' will be interpreted as a newline character, i.e. a line break is performed.
+
+If multiple positions are defined, only a single string or one string for each position is allowed in String. In this case, line breaks have to be forced with '\n'.
+
+The position of the text may be specified in window coordinates (CoordSystem = 'window') or in image coordinates (CoordSystem = 'image'), which is useful when using zoomed images.
+
+In addition to supplying (Row, Column) coordinates, it is also possible to pass predefined values to Row and Column to display the text at a fixed position in the window (only if CoordSystem = 'window').
+
+The parameter Color also accepts tuples of values. In that case, the specified colors are used cyclically for every new text position or for every new textline if a single position is used.
+
+Box:
+If set to 'true', the text is written within an orange box.
+If set to' false', no box is displayed.
+If set to a color string (e.g. 'white', '#FF00CC', etc.), the text is written in a box of that color.
+An optional second value for Box controls if a shadow is displayed. Possible values are 'true', 'false', or a valid color string.
+
+
+
+
+</abstract>
+<alternatives>
+<item>disp_text</item>
+<item>write_string</item>
+<item>disp_continue_message</item>
+</alternatives>
+<chapters>
+<item>Graphics</item>
+<item>Text</item>
+</chapters>
+<chapters lang="de_DE">
+<item>Graphik</item>
+<item>Text</item>
+</chapters>
+<chapters lang="en_US">
+<item>Graphics</item>
+<item>Text</item>
+</chapters>
+<example lang="en_US">dev_open_window (0, 0, 512, 512, 'black', WindowHandle)
+set_display_font (WindowHandle, 16, 'mono', 'true', 'false')
+disp_message (WindowHandle, ['Hello','world!'], 'window', 12, 12, ['black','blue'], 'true')
+disp_message (WindowHandle, ['Hello','world!'], 'window', 12, 120, 'white', ['blue','false'])
+Angle := [0,90,180,270]
+Row := 200 - sin(rad(Angle))*100
+Column := 250 + cos(rad(Angle))*100
+Color := ['green','red','red','red']
+disp_message (WindowHandle, Angle+' deg', 'window', Row, Column, Color, 'false')
+gen_cross_contour_xld (Cross, 200, 250, 200, 0)
+</example>
+<keywords lang="de_DE">
+<item>Meldung anzeigen</item>
+</keywords>
+<keywords lang="en_US">
+<item>display message</item>
+</keywords>
+<library lang="de_DE">MVTec Standard Procedures</library>
+<library lang="en_US">MVTec Standard Procedures</library>
+<predecessor>
+<item>dev_open_window</item>
+<item>set_display_font</item>
+<item>dev_open_window_fit_image</item>
+<item>dev_open_window_fit_size</item>
+<item>dev_display</item>
+<item>disp_obj</item>
+<item>disp_image</item>
+</predecessor>
+<see_also>
+<item>write_string</item>
+<item>disp_continue_message</item>
+</see_also>
+<short>This procedure writes a text message.</short>
+<short lang="de_DE">This procedure writes a text message.</short>
+<short lang="en_US">This procedure writes a text message.</short>
+<successor>
+<item>disp_continue_message</item>
+<item>dev_display</item>
+<item>disp_obj</item>
+</successor>
+<parameters>
+<parameter id="Box">
+<default_type>string</default_type>
+<default_value>'true'</default_value>
+<description lang="en_US">If set to 'true', the text is written within an orange box.
+If set to' false', no box is displayed.
+If set to a color string (e.g. 'white', '#FF00CC', etc.), the text is written in a box of that color. Optionally, a second value controls the appearance of a box shadow.</description>
+<multivalue>optional</multivalue>
+<sem_type>attribute.value</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<value_list>
+<item>'true'</item>
+<item>'false'</item>
+<item>'white'</item>
+<item>'red'</item>
+<item>'forest green'</item>
+<item>'black'</item>
+<item>'blue'</item>
+</value_list>
+</parameter>
+<parameter id="Color">
+<default_type>string</default_type>
+<default_value>'black'</default_value>
+<description lang="en_US">Defines the color of the text as string. If set to [], or '' the currently set color is used. If a tuple of strings is passed, the colors are used cyclically for each new position or textline.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>color</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>''</item>
+<item>'black'</item>
+<item>'blue'</item>
+<item>'yellow'</item>
+<item>'red'</item>
+<item>'green'</item>
+<item>'cyan'</item>
+<item>'magenta'</item>
+<item>'forest green'</item>
+<item>'lime green'</item>
+<item>'coral'</item>
+<item>'slate blue'</item>
+</values>
+</parameter>
+<parameter id="Column">
+<default_type>integer</default_type>
+<default_value>12</default_value>
+<description lang="en_US">The horizontal text alignment or the column coordinate of the desired text position. -1 is mapped to 12.</description>
+<multivalue>optional</multivalue>
+<sem_type>point.x</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+<item>string</item>
+</type_list>
+<values>
+<item>10</item>
+<item>12</item>
+<item>20</item>
+<item>30</item>
+<item>'center'</item>
+<item>'left'</item>
+<item>'right'</item>
+</values>
+</parameter>
+<parameter id="CoordSystem">
+<default_type>string</default_type>
+<default_value>'window'</default_value>
+<description lang="en_US">If set to 'window', the text position is given with respect to the window coordinate system. If set to 'image', image coordinates are used (This may be useful in zoomed images).</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>attribute.value</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<value_list>
+<item>'window'</item>
+<item>'image'</item>
+</value_list>
+</parameter>
+<parameter id="Row">
+<default_type>integer</default_type>
+<default_value>12</default_value>
+<description lang="en_US">The vertical text alignment or the row coordinate of the desired text position. -1 is mapped to 12.</description>
+<multivalue>optional</multivalue>
+<sem_type>point.y</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+<item>string</item>
+</type_list>
+<values>
+<item>10</item>
+<item>12</item>
+<item>20</item>
+<item>30</item>
+<item>'bottom'</item>
+<item>'center'</item>
+<item>'top'</item>
+</values>
+</parameter>
+<parameter id="String">
+<default_type>string</default_type>
+<description lang="en_US">A tuple of strings containing the text message to be displayed. Each value of the tuple will be displayed in a single line.
+</description>
+<mixed_type>optional</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="WindowHandle">
+<default_type>integer</default_type>
+<description lang="en_US">The window handle of the graphics window, where the message should be displayed.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>window</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_get_image_status_message">
+<interface>
+<ic>
+<par name="CurrentSample" base_type="ctrl" dimension="0"/>
+<par name="ImageCounter" base_type="ctrl" dimension="0"/>
+<par name="ImageFilename" base_type="ctrl" dimension="0"/>
+<par name="ImageLabelStatus" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Messages" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This is a helper procedure that returns a nice status message tuple of the current image/sample.</c>
+<c>* </c>
+<l>get_dict_tuple (CurrentSample, 'image_id', ImageID)</l>
+<l>dlt_get_num_annotations (CurrentSample, NumAnnotations)</l>
+<l>NumAnnotations := NumAnnotations$'3.0f'</l>
+<c>* </c>
+<l>Messages[0] := 'Image idx: ' + (ImageCounter + 1)$'5.0f'</l>
+<l>Messages[1] := 'Image name: ' + ImageFilename</l>
+<c>* </c>
+<l>if (ImageLabelStatus == 1)</l>
+<c>    * Labels for this image exist.</c>
+<l>    MessageLabeled := 'true '</l>
+<l>    MessageImageID := ImageID$'5.0f'</l>
+<l>elseif (ImageLabelStatus == 0)</l>
+<c>    * No labels for this image exist.</c>
+<l>    MessageLabeled := 'false'</l>
+<l>    MessageImageID := '-----'</l>
+<l>    NumAnnotations := '---'</l>
+<l>elseif (ImageLabelStatus == -1)</l>
+<c>    * The labeling of this image is in doing.</c>
+<l>    MessageLabeled := 'doing'</l>
+<l>    MessageImageID := ImageID$'5.0f'</l>
+<l>else</l>
+<l>    throw ('Unsupported ImageLabelStatus: ' + ImageLabelStatus)</l>
+<l>endif</l>
+<c>* </c>
+<l>Messages[2] := 'ImageID  : ' + MessageImageID</l>
+<l>Messages[3] := 'Labeled   : ' + MessageLabeled</l>
+<l>Messages[4] := 'Number of annotations: ' + NumAnnotations</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_get_image_status_message">
+<parameters>
+<parameter id="CurrentSample">
+<default_type>integer</default_type>
+<mixed_type>false</mixed_type>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="ImageCounter"/>
+<parameter id="ImageFilename"/>
+<parameter id="ImageLabelStatus"/>
+<parameter id="Messages"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_go_to_previous_image">
+<interface>
+<ic>
+<par name="DataChanged" base_type="ctrl" dimension="0"/>
+<par name="ImageCounter" base_type="ctrl" dimension="0"/>
+<par name="NumImages" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="WriteData" base_type="ctrl" dimension="0"/>
+<par name="ImageCounterOut" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>*  This procedure goes to the previous image to label.</c>
+<c>* </c>
+<l>ImageCounterOut := ImageCounter</l>
+<l>if (DataChanged)</l>
+<l>    WriteData := 1</l>
+<l>endif</l>
+<c>*move to previous or the last image if we are at the first image.</c>
+<l>if (ImageCounterOut &gt; 0)</l>
+<l>    ImageCounterOut := ImageCounterOut-1</l>
+<l>else</l>
+<l>    ImageCounterOut := NumImages-1</l>
+<l>endif    </l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_go_to_previous_image">
+<short lang="de_DE">Go to the previous image</short>
+<parameters>
+<parameter id="DataChanged"/>
+<parameter id="ImageCounter"/>
+<parameter id="ImageCounterOut"/>
+<parameter id="NumImages"/>
+<parameter id="WriteData"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_go_to_next_image">
+<interface>
+<ic>
+<par name="DataChanged" base_type="ctrl" dimension="0"/>
+<par name="ImageCounter" base_type="ctrl" dimension="0"/>
+<par name="NumImages" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="WriteData" base_type="ctrl" dimension="0"/>
+<par name="ImageCounterOut" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure goes to the next image to label.</c>
+<c>* </c>
+<l>ImageCounterOut := ImageCounter</l>
+<l>if (DataChanged)</l>
+<l>    WriteData := 1</l>
+<l>endif</l>
+<c>* move to next image or first if we are at the last</c>
+<l>if (ImageCounterOut &lt; NumImages-1)</l>
+<l>    ImageCounterOut := ImageCounterOut+1</l>
+<l>else</l>
+<l>    ImageCounterOut := 0</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_go_to_next_image">
+<short lang="de_DE">Go to the next image.</short>
+<parameters>
+<parameter id="DataChanged"/>
+<parameter id="ImageCounter"/>
+<parameter id="ImageCounterOut"/>
+<parameter id="NumImages"/>
+<parameter id="WriteData"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_jump_to_image">
+<interface>
+<ic>
+<par name="DataChanged" base_type="ctrl" dimension="0"/>
+<par name="ImageWindowHandle" base_type="ctrl" dimension="0"/>
+<par name="MessageWindowHandle" base_type="ctrl" dimension="0"/>
+<par name="TopicColors" base_type="ctrl" dimension="0"/>
+<par name="NumImages" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="WriteData" base_type="ctrl" dimension="0"/>
+<par name="ImageCounter" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure jumps to an image given by its index.</c>
+<c>* </c>
+<l>if (DataChanged)</l>
+<l>    WriteData := 1</l>
+<l>endif</l>
+<c>* </c>
+<c>* Jump to scene by putting in its number.</c>
+<l>dev_display_dlt_menu_message (MessageWindowHandle, TopicColors[1], 'Please enter an image index to jump to and approve with return: ', 'centered')</l>
+<l>read_char (ImageWindowHandle, Char, Code)</l>
+<l>CharToJumpTo := ''</l>
+<l>MenuMessageText := 'Please enter a sequence-number to jump to and approve with return: '</l>
+<c>* Leave the input mode if either the escape button is pressed or the return button was pressed after an input.</c>
+<l>while( not ((Char == '\r' and CharToJumpTo != '') or Char == '\x1b'))</l>
+<l>    MenuMessageColor := TopicColors[1]</l>
+<c>    * Show error if input is not a number and delete the last input with the delete button.</c>
+<l>    if (ord('0') &lt;= ord(Char) and ord(Char) &lt;= ord('9'))</l>
+<l>        CharToJumpTo := CharToJumpTo + Char</l>
+<l>    elseif (Char == '\b' and CharToJumpTo != '')</l>
+<c>        * If there are no inputs left to delete, show an empty string.</c>
+<l>        if (strlen(CharToJumpTo) == 1)</l>
+<l>            CharToJumpTo := ''</l>
+<l>        else </l>
+<l>            CharToJumpTo := CharToJumpTo{0 : strlen(CharToJumpTo) - 2}</l>
+<l>        endif</l>
+<l>    else</l>
+<l>        MenuMessageText := 'You did not enter a valid sequence-number. Please try again and approve with return: '</l>
+<l>        MenuMessageColor := TopicColors[3]</l>
+<l>        CharToJumpTo := ''</l>
+<l>    endif</l>
+<l>    dev_display_dlt_menu_message (MessageWindowHandle, MenuMessageColor, MenuMessageText + CharToJumpTo, 'centered')</l>
+<l>    read_char (ImageWindowHandle, Char, Code)</l>
+<l>endwhile</l>
+<l>if (Char == '\r')</l>
+<l>    ImageCounter := max2(0, (number(CharToJumpTo) % NumImages) - 1)</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_jump_to_image">
+<abstract lang="de_DE">Image indices start at 0 and end at NumImages - 1</abstract>
+<short lang="de_DE">Jump to the image specified by index</short>
+<parameters>
+<parameter id="DataChanged"/>
+<parameter id="ImageCounter"/>
+<parameter id="ImageWindowHandle"/>
+<parameter id="MessageWindowHandle"/>
+<parameter id="NumImages"/>
+<parameter id="TopicColors"/>
+<parameter id="WriteData"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_annotate_sample">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="DataChanged" base_type="ctrl" dimension="0"/>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="ToolChars" base_type="ctrl" dimension="0"/>
+<par name="ToolCodes" base_type="ctrl" dimension="0"/>
+<par name="ToolOptions" base_type="ctrl" dimension="0"/>
+<par name="ToolMenuMessage" base_type="ctrl" dimension="0"/>
+<par name="ImageCounter" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="WriteData" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure is used to add any annotation to the sample selected by the user.</c>
+<c>*</c>
+<c>* Read the parameters from LabelToolOptionsDict</c>
+<l>get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>get_dict_tuple (LabeltoolParams, 'zoom_factor', ZoomFactor)</l>
+<l>get_dict_tuple (LabeltoolParams, 'polygon_tolerance', PolygonTolerance)</l>
+<l>get_dict_tuple (LabeltoolParams, 'region_type', RegionType)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_names', ClassNames)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_ids', ClassIDs)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_id_to_class_idx', ClassIDToClassIdx)</l>
+<l>get_dict_tuple (LabeltoolParams, 'default_class_name', DefaultClassname)</l>
+<l>get_dict_tuple (LabeltoolParams, 'wait_seconds', WaitSeconds)</l>
+<l>if (DatasetType == 'segmentation')</l>
+<l>    get_dict_tuple (LabeltoolParams, 'segmentation_dir', SegmentationDir)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'class_ids_foreground', ClassIDsForeground)</l>
+<l>endif</l>
+<c>* Get the window handles and display parameters.</c>
+<l>get_dict_tuple (LabeltoolParams, 'window_topic_colors', TopicColors)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_colors', ClassColors)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_image', ImageWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_zoom', ZoomWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_instruction', InstructionWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_message', MessageWindowHandle)</l>
+<c></c>
+<l>MessageBackgroundColor := TopicColors[1]</l>
+<c>* </c>
+<c>* </c>
+<c>* *********************************</c>
+<c>* **  Walk through annotations  ***</c>
+<c>* *********************************</c>
+<c>* </c>
+<c>* initialize the options to false</c>
+<l>MoveDown := false</l>
+<l>MoveUp := false</l>
+<l>SelectAnnotationByClick := false</l>
+<l>AddAnnotation := false</l>
+<l>ChangeRegion := false</l>
+<l>ChangeClass := false</l>
+<l>DeleteObject := false</l>
+<l>AnnotationIdx := 0</l>
+<l>CurrentRegionType := RegionType</l>
+<l>DrawingRegionType := RegionType</l>
+<c>* Only for rectange2.</c>
+<l>ChangeOrientation := false</l>
+<c>*</c>
+<l>Finished := false</l>
+<l>WriteData := false</l>
+<l>while (1)</l>
+<c>    * </c>
+<c>    * *********************</c>
+<c>    * **  Parse sample  ***</c>
+<c>    * *********************</c>
+<c>    * </c>
+<l>    get_dict_tuple (Sample, 'image_file_name', ImageFileName)</l>
+<l>    dlt_get_image_status_message (Sample, ImageCounter, ImageFileName, -1, DisplayMessage)</l>
+<l>    dev_display_dlt_menu_message (MessageWindowHandle, TopicColors[0], DisplayMessage, 'show_image_status')</l>
+<c>    *</c>
+<l>    if (DatasetType == 'segmentation')</l>
+<l>        dlt_get_sample_annotations_segmentation (Annotations, Sample, SegmentationDir, ClassIDsForeground, ClassIDs, ClassIDToClassIdx, LabelIDs, NumAnnotations)</l>
+<l>    else</l>
+<l>        dlt_get_sample_annotations_detection (Annotations, Sample, RegionType, LabelIDs, NumAnnotations)</l>
+<l>    endif</l>
+<c>    *</c>
+<l>    dlt_get_region_information_from_sample (RegionType, Sample, AnnotationIdx, RegionInfo) </l>
+<c>    * </c>
+<c>    * ****************************</c>
+<c>    * **  Display annotations  ***</c>
+<c>    * ****************************</c>
+<c>    * </c>
+<c>    * Display current annotation in ZoomWindow.</c>
+<l>    if (NumAnnotations)</l>
+<l>        ClassID := LabelIDs[AnnotationIdx]</l>
+<l>        ClassIdx := ClassIDToClassIdx[ClassID]</l>
+<l>        select_obj (Annotations, Annotation, AnnotationIdx + 1)</l>
+<l>        dev_display_dlt_annotation_zoom_window (Annotation, Image, ZoomWindowHandle, ClassColors[ClassIdx], ClassNames[ClassIdx])</l>
+<l>    endif</l>
+<c>    *</c>
+<c>    * Display annotations in ImageWindow.</c>
+<l>    dev_display_dlt_annotations (Image, Annotations, LabeltoolParams, LabelIDs, AnnotationIdx, false, true)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>    if (DatasetType == 'detection_rect2')</l>
+<l>        dlt_get_sample_orientations_arrows (OrientationArrows, DatasetType, Sample)</l>
+<l>        dev_display_dlt_annotations (Image, OrientationArrows, LabeltoolParams, LabelIDs, AnnotationIdx, false, false)</l>
+<l>    endif</l>
+<c>    * </c>
+<c>    * </c>
+<c>    * *******************</c>
+<c>    * **  Label data  ***</c>
+<c>    * *******************</c>
+<c>    * </c>
+<l>    dev_set_window (InstructionWindowHandle)</l>
+<l>    dev_clear_window ()</l>
+<l>    disp_message (InstructionWindowHandle, ToolMenuMessage, 'window', 12, 12, 'black', 'true')</l>
+<c>    * </c>
+<c>    * </c>
+<c>    * *************************************</c>
+<c>    * **  Find out what should be done  ***</c>
+<c>    * *************************************</c>
+<c>    * </c>
+<l>    CharFound := -1</l>
+<l>    CodeFound := -1</l>
+<l>    read_char (ImageWindowHandle, Char, Code)</l>
+<l>    if (Char # '')</l>
+<l>        CharFound := find(ToolChars, Char)</l>
+<l>    endif</l>
+<l>    if (Code # '')</l>
+<l>        CodeFound := find(ToolCodes, Code)</l>
+<l>    endif</l>
+<l>    if ((CharFound == -1 and CodeFound == -1))</l>
+<l>        dev_display_dlt_menu_message (MessageWindowHandle, 'yellow', 'invalid input', 'centered')</l>
+<l>        wait_seconds (7 * WaitSeconds)</l>
+<l>    else</l>
+<c>        * If a Code is found, ignore the char.</c>
+<l>        if (Code # 'character')</l>
+<l>            CharFound := -1</l>
+<l>        endif</l>
+<c>        * Only one should be found!</c>
+<l>        IdxFound := number(CharFound[&gt;]-1) * CharFound + number(CodeFound[&gt;]-1) * CodeFound</l>
+<l>        Command := ToolOptions[IdxFound]</l>
+<l>        if(Command == 'ChangeRegion')</l>
+<c>            * Change annotations.</c>
+<l>            ChangeRegion := true</l>
+<l>        elseif (Command == 'ChangeClass')</l>
+<c>            * Change class of an annotation.</c>
+<l>            ChangeClass := true</l>
+<l>        elseif(Command == 'AddNewObject')</l>
+<c>            * Add a new annotation.</c>
+<l>            AddAnnotation := true</l>
+<l>            CurrentRegionType := RegionType</l>
+<l>            DrawingRegionType := RegionType</l>
+<l>            if (RegionType == 'rectangle2')</l>
+<c>                * The region should be drawn as rectangle1 but saved in rectangle2 format.</c>
+<l>                DrawingRegionType := 'rectangle1'</l>
+<l>            endif</l>
+<l>        elseif(Command == 'AddNewEllipticObject')</l>
+<c>            * Add a new elliptic annotation.</c>
+<l>            AddAnnotation := true</l>
+<l>            CurrentRegionType := 'ellipse'</l>
+<l>            DrawingRegionType := RegionType</l>
+<l>        elseif(Command == 'AddNewRectangle2')</l>
+<c>            * Add a new rect2 annotation.</c>
+<l>            AddAnnotation := true</l>
+<l>            CurrentRegionType := 'rectangle2'</l>
+<l>            DrawingRegionType := 'rectangle2'</l>
+<l>        elseif(Command == 'ChangeOrientation')</l>
+<c>            * Change orientation by 90°.</c>
+<l>            ChangeOrientation := true</l>
+<l>        elseif(Command == 'AddRectangleByPolygon')</l>
+<c>            * Add rectangle using polygon.</c>
+<l>            AddAnnotation := true</l>
+<l>            CurrentRegionType := RegionType</l>
+<l>            DrawingRegionType := 'mask'</l>
+<l>        elseif (Command == 'PreviousAnnotation')</l>
+<c>            * Move to previous annotation.</c>
+<l>            MoveDown := true</l>
+<l>        elseif (Command == 'NextAnnotation')</l>
+<c>            * Move to next annotation.</c>
+<l>            MoveUp := true</l>
+<l>        elseif (Command == 'SaveAnnotation')</l>
+<c>            * Save the annotations and quit.</c>
+<l>            DataChanged := true</l>
+<l>            Finished := true</l>
+<l>        elseif (Command == 'RemoveAnnotation')</l>
+<c>            * Remove an annotation.</c>
+<l>            DeleteObject := true</l>
+<l>        elseif (Command == 'SelectAnnotation')</l>
+<c>            * Select an annotation by click.</c>
+<l>            SelectAnnotationByClick := true</l>
+<l>        elseif (Command == 'Stop')</l>
+<c>            * Stop program.</c>
+<l>            stop()</l>
+<l>        elseif (Char == '\x1B')</l>
+<c>            * Stop program.</c>
+<l>            stop()</l>
+<l>        else</l>
+<l>            dev_display_dlt_menu_message (MessageWindowHandle, 'yellow', 'invalid input', 'centered')</l>
+<l>            wait_seconds (7 * WaitSeconds)</l>
+<l>        endif</l>
+<l>    endif</l>
+<c>    * </c>
+<c>    * </c>
+<c>    * ******************************</c>
+<c>    * **  Selection of routines  ***</c>
+<c>    * ******************************</c>
+<c>    * </c>
+<l>    if (MoveDown == true)</l>
+<l>        if (NumAnnotations &gt; 0)</l>
+<l>            if (AnnotationIdx &gt; 0)</l>
+<l>                AnnotationIdx := AnnotationIdx - 1</l>
+<l>            else</l>
+<l>                AnnotationIdx := NumAnnotations -1</l>
+<l>            endif</l>
+<l>        endif</l>
+<l>        MoveDown := false</l>
+<l>    endif</l>
+<l>    if (MoveUp == true)</l>
+<l>        if (NumAnnotations &gt; 0)   </l>
+<l>            if (AnnotationIdx &lt; NumAnnotations - 1)</l>
+<l>                AnnotationIdx := AnnotationIdx + 1</l>
+<l>            else</l>
+<l>                AnnotationIdx := 0</l>
+<l>            endif</l>
+<l>        endif</l>
+<l>        MoveUp := false</l>
+<l>    endif</l>
+<l>    if (SelectAnnotationByClick)</l>
+<l>        if (NumAnnotations &gt; 0)       </l>
+<l>            dlt_select_annotation_by_click_sample (Image, Sample, LabeltoolParams, AnnotationIdx)</l>
+<l>            SelectAnnotationByClick := false</l>
+<l>        endif</l>
+<l>    endif</l>
+<c>    * </c>
+<c>    * </c>
+<c>    * *******************************</c>
+<c>    * **  Manipulate annotations  ***</c>
+<c>    * *******************************</c>
+<c>    * </c>
+<c>    * Add new annotation.</c>
+<l>    if (AddAnnotation == true)</l>
+<l>        dev_display_dlt_menu_message (MessageWindowHandle, MessageBackgroundColor, 'Draw new Annotation (confirm with right-click)', 'centered')</l>
+<l>        gen_empty_region (Annotation)</l>
+<l>        dev_set_window (ImageWindowHandle)</l>
+<l>        dev_set_color (ClassColors[find(ClassNames, DefaultClassname)])</l>
+<l>        dlt_draw_annotation_region (Image, Annotations, Annotation, Annotation, LabeltoolParams, LabelIDs, AnnotationIdx, CurrentRegionType, DrawingRegionType, RegionInfo)</l>
+<c>        * Add the annotation to the sample.</c>
+<l>        ClassIdx := find (ClassNames, DefaultClassname)</l>
+<l>        ClassID := ClassIDs[ClassIdx]</l>
+<l>        dlt_add_annotation_to_sample (Annotation, Sample, ClassIDs[ClassIdx], CurrentRegionType, DrawingRegionType, RegionInfo)</l>
+<c>        * Set the AnnotationIdx.</c>
+<l>        dlt_get_num_annotations (Sample, NumAnnotations)</l>
+<l>        AnnotationIdx := NumAnnotations - 1</l>
+<l>        AddAnnotation := false</l>
+<l>        CurrentRegionType := RegionType</l>
+<l>    endif</l>
+<c>    * </c>
+<c>    * Change region.</c>
+<l>    if (ChangeRegion == true)</l>
+<l>        if (NumAnnotations &gt; 0)</l>
+<c>            * Modify the region with the drawing object.</c>
+<l>            dev_display_dlt_menu_message (MessageWindowHandle, MessageBackgroundColor, 'Adapt Annotation', 'centered')</l>
+<l>            dlt_draw_annotation_region (Image, Annotations, Annotation, Annotation, LabeltoolParams, LabelIDs, AnnotationIdx, RegionType, DrawingRegionType, RegionInfo)</l>
+<c>            * Call replace procedure. It will take care of changing the bounding box coordinates.</c>
+<l>            dlt_replace_annotation_in_sample (Annotation, Sample, ClassID, AnnotationIdx, RegionType, RegionInfo)</l>
+<l>            DataChanged := true</l>
+<l>        endif</l>
+<l>        ChangeRegion := false</l>
+<l>    endif</l>
+<c>    * </c>
+<c>    * Change class.</c>
+<l>    if (ChangeClass == true)</l>
+<l>        if (NumAnnotations &gt; 0)   </l>
+<l>            dlt_change_annotation_type (Annotation, LabeltoolParams, ClassNames, ClassIDs, TopicColors, Sample, AnnotationIdx, RegionType, DataChanged)</l>
+<l>        endif</l>
+<l>        ChangeClass := false</l>
+<l>    endif</l>
+<c>    * </c>
+<c>    * Change orientation by 90* (only for rectangle2).</c>
+<l>    if (ChangeOrientation == true)</l>
+<l>        if (NumAnnotations &gt; 0)</l>
+<l>            dev_display_dlt_menu_message (MessageWindowHandle, MessageBackgroundColor, 'Change rectangle2 orientation', 'centered')</l>
+<l>            dlt_change_orientation (Sample, AnnotationIdx, RegionType, RegionInfo)</l>
+<c>            * Replace annotation in sample using RegionInfo.</c>
+<l>            dlt_replace_annotation_in_sample (Annotation, Sample, ClassID, AnnotationIdx, RegionType, RegionInfo)</l>
+<l>            DataChanged := true</l>
+<l>        endif</l>
+<l>        ChangeOrientation := false</l>
+<l>    endif</l>
+<c>    * </c>
+<c>    * Delete annotation.</c>
+<l>    if (DeleteObject == true)</l>
+<l>        if (NumAnnotations &gt;0) </l>
+<l>            area_center (Annotation, _, Row, Column)</l>
+<l>            dlt_remove_annotation_in_sample (Sample, AnnotationIdx, RegionType)</l>
+<l>            dlt_get_num_annotations (Sample, NumAnnotations)</l>
+<c>            *</c>
+<l>            if (NumAnnotations &gt; 0)</l>
+<c>                * To make the user experience better, the</c>
+<c>                * next annotation id is the closest to the old box.</c>
+<l>                dlt_find_closest_annotation_in_sample (Sample, Row, Column, RegionType, AnnotationIdx)</l>
+<l>            endif</l>
+<c>            *</c>
+<l>            DataChanged := true</l>
+<l>        endif</l>
+<l>        DeleteObject := false</l>
+<l>        dev_set_window (ZoomWindowHandle)</l>
+<l>        dev_clear_window ()</l>
+<l>    endif</l>
+<c>    </c>
+<l>    if (Finished)</l>
+<l>        dev_set_window (ZoomWindowHandle)</l>
+<l>        dev_clear_window ()</l>
+<l>        break</l>
+<l>    endif</l>
+<l>endwhile</l>
+<c>* </c>
+<l>if (DataChanged)</l>
+<l>    WriteData := true</l>
+<l>endif</l>
+<l>dev_set_window (ImageWindowHandle)</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_annotate_sample">
+<parameters>
+<parameter id="DataChanged"/>
+<parameter id="Image"/>
+<parameter id="ImageCounter"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="Sample"/>
+<parameter id="ToolChars"/>
+<parameter id="ToolCodes"/>
+<parameter id="ToolMenuMessage"/>
+<parameter id="ToolOptions"/>
+<parameter id="WriteData"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_copy_annotations_from_previous_sample">
+<interface>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="PreviousSample" base_type="ctrl" dimension="0"/>
+<par name="CurrentSample" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="WriteData" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure copies the annotations from the previous sample.</c>
+<c>* This functionalits might be useful if scenes are labeled.</c>
+<c>* Note that already existing annotations might be overwritten.</c>
+<c>* </c>
+<c>* Check if the previous sample contains annotations. If not, do nothing.</c>
+<l>get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>try</l>
+<l>    KeyToCheck := ''</l>
+<l>    if (DatasetType == 'detection')</l>
+<l>        KeyToCheck := 'bbox_label_id'</l>
+<l>    elseif (DatasetType == 'segmentation')</l>
+<l>        KeyToCheck := 'annotation_label_id'</l>
+<l>    endif</l>
+<l>    get_dict_tuple (PreviousSample, KeyToCheck, PrevLabelIDs)</l>
+<l>    if (|PrevLabelIDs| == 0)</l>
+<c>        * No previous sample is available -&gt; do nothing.</c>
+<l>        WriteData := 0</l>
+<l>        return ()</l>
+<l>    endif</l>
+<l>catch (Exception)</l>
+<c>    * No previous sample is available -&gt; do nothing.</c>
+<l>    WriteData := 0</l>
+<l>    return ()</l>
+<l>endtry</l>
+<c>* </c>
+<l>WriteData := 1</l>
+<c>* </c>
+<c>* Copy detection labels, if present.</c>
+<l>try</l>
+<c>    * Get annotations from previous sample.</c>
+<l>    get_dict_tuple (PreviousSample, 'bbox_row1', PrevRow1)</l>
+<l>    get_dict_tuple (PreviousSample, 'bbox_col1', PrevCol1)</l>
+<l>    get_dict_tuple (PreviousSample, 'bbox_row2', PrevRow2)</l>
+<l>    get_dict_tuple (PreviousSample, 'bbox_col2', PrevCol2)</l>
+<l>    get_dict_tuple (PreviousSample, 'bbox_label_id', PrevLabelIDs)</l>
+<c>    * </c>
+<c>    * Copy annotations of previous sample to current sample.</c>
+<l>    set_dict_tuple (CurrentSample, 'bbox_row1', PrevRow1)</l>
+<l>    set_dict_tuple (CurrentSample, 'bbox_col1', PrevCol1)</l>
+<l>    set_dict_tuple (CurrentSample, 'bbox_row2', PrevRow2)</l>
+<l>    set_dict_tuple (CurrentSample, 'bbox_col2', PrevCol2)</l>
+<l>    set_dict_tuple (CurrentSample, 'bbox_label_id', PrevLabelIDs)</l>
+<l>catch (Exception)</l>
+<l>endtry</l>
+<c>* </c>
+<c>* Copy segmentation labels, if present.</c>
+<l>try</l>
+<c>    * </c>
+<c>    * Get annotations from previous sample.</c>
+<l>    get_dict_tuple (LabeltoolParams, 'segmentation_dir', SegmentationDir)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'class_ids_foreground', ClassIDsForeground)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'class_ids', ClassIDs)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'class_id_to_class_idx', ClassIDToClassIdx)</l>
+<l>    dlt_get_sample_annotations_segmentation (Annotations, PreviousSample, SegmentationDir, ClassIDsForeground, ClassIDs, ClassIDToClassIdx, LabelIDs, NumAnnotations)</l>
+<c>    * </c>
+<c>    * Copy annotations of previous sample to current sample.</c>
+<l>    set_dict_tuple (CurrentSample, 'annotation_label_id', LabelIDs)</l>
+<l>    set_dict_object (Annotations, CurrentSample, 'annotations')</l>
+<l>catch (Exception)</l>
+<l>endtry</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_copy_annotations_from_previous_sample">
+<short lang="de_DE">Copy annotations from the previous sample (image)</short>
+<parameters>
+<parameter id="CurrentSample">
+<default_type>integer</default_type>
+<default_value>CurrentSample</default_value>
+<description lang="de_DE">Current sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="LabeltoolParams"/>
+<parameter id="PreviousSample">
+<default_type>integer</default_type>
+<default_value>PreviousSample</default_value>
+<description lang="de_DE">Previous sample</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="WriteData"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_write_sample_segmentation_image">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Generate a segmentation image from sample annotations and write out.</c>
+<c>*</c>
+<c>* Get some params.</c>
+<l>get_dict_tuple (LabeltoolParams, 'set_background_id', SetBackgroundID)</l>
+<l>get_dict_tuple (LabeltoolParams, 'image_dir', ImageDir)</l>
+<l>get_dict_tuple (LabeltoolParams, 'segmentation_dir', SegmentationDir)</l>
+<c>*</c>
+<l>if (Sample # HNULL)</l>
+<c>    *</c>
+<c>    * Read image and initialize the annotation image.</c>
+<l>    get_dict_tuple (Sample, 'image_file_name', ImageFilename)</l>
+<l>    read_image (Image, ImageDir + '/' + ImageFilename)</l>
+<l>    get_image_size (Image, Width, Height)</l>
+<l>    gen_image_const (SegmentationImage, 'byte', Width, Height)</l>
+<l>    paint_region (SegmentationImage, SegmentationImage, SegmentationImage, SetBackgroundID, 'fill')</l>
+<c>    *</c>
+<c>    * Go through annotation-regions and overpaint.</c>
+<l>    get_dict_param (Sample, 'key_exists', 'annotation_label_id', KeyExists)</l>
+<l>    if (KeyExists)</l>
+<l>        get_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<l>        get_dict_object (Annotations, Sample, 'annotations')</l>
+<l>        for LIdx := 0 to |LabelIDs|-1 by 1</l>
+<l>            select_obj (Annotations, Annotation, LIdx+1)</l>
+<l>            paint_region (Annotation, SegmentationImage, SegmentationImage, LabelIDs[LIdx], 'fill')</l>
+<l>        endfor</l>
+<l>    endif</l>
+<c>    *</c>
+<c>    * Write out annotation image.</c>
+<l>    tuple_split (ImageFilename, '.', Substrings)</l>
+<l>    SegmentationFilename := Substrings[0:|Substrings|-2] + '.png'</l>
+<l>    set_dict_tuple (Sample, 'segmentation_file_name', SegmentationFilename)</l>
+<l>    write_image (SegmentationImage, 'png', 0, SegmentationDir + '/' + SegmentationFilename)</l>
+<c>    *</c>
+<c>    * Remove unnecessary keys from sample.</c>
+<l>    get_dict_param (Sample, 'key_exists', ['annotations', 'annotation_label_id'], KeysExist)</l>
+<l>    if (KeysExist[0])</l>
+<l>        remove_dict_key (Sample, 'annotations')    </l>
+<l>    endif</l>
+<l>    if (KeysExist[1])</l>
+<l>        remove_dict_key (Sample, 'annotation_label_id')            </l>
+<l>    endif</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_write_sample_segmentation_image">
+<parameters>
+<parameter id="LabeltoolParams"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_add_sample_to_dl_dataset">
+<interface>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+<par name="SampleIdx" base_type="ctrl" dimension="0"/>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="SampleExists" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure adds a sample to a dl dataset and increases the image ID in LabeltoolParams.</c>
+<c>* </c>
+<c>* Add the current sample to DLDataset, but only if it contains all entries.</c>
+<l>get_dict_tuple (LabeltoolParams, 'dataset_type', DatasetType)</l>
+<l>get_dict_tuple (LabeltoolParams, 'region_type', RegionType)</l>
+<l>if (DatasetType == 'detection')</l>
+<l>    NeededDLSampleKeys := ['image_id', 'bbox_row1', 'bbox_col1', 'bbox_row2', 'bbox_col2', 'bbox_label_id']</l>
+<l>elseif (DatasetType == 'detection_rect2')</l>
+<l>    NeededDLSampleKeys := ['image_id', 'bbox_row', 'bbox_col', 'bbox_phi', 'bbox_length1', 'bbox_length2', 'bbox_label_id']</l>
+<l>elseif (DatasetType == 'segmentation')</l>
+<l>    NeededDLSampleKeys := ['image_id', 'segmentation_file_name']</l>
+<l>endif</l>
+<l>get_dict_param (Sample, 'key_exists', NeededDLSampleKeys, KeysExist)</l>
+<c>* </c>
+<l>if (sum(KeysExist [=] 1) != |NeededDLSampleKeys|)</l>
+<c>    * Some keys are missing, hence the annotation is incomplete -&gt; do not add it.</c>
+<l>    return ()</l>
+<l>endif</l>
+<c>* </c>
+<c>* Add sample to DLDataset.</c>
+<l>get_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>Samples[SampleIdx] := Sample</l>
+<l>set_dict_tuple (DLDataset, 'samples', Samples)</l>
+<c>* </c>
+<l>if (not SampleExists)</l>
+<c>    * The sample is new and has the actually highest ImageID -&gt; increase image ID for next sample.</c>
+<l>    get_dict_tuple (Sample, 'image_id', ImageID)</l>
+<l>    set_dict_tuple (LabeltoolParams, 'max_image_id', ImageID)</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_add_sample_to_dl_dataset">
+<parameters>
+<parameter id="DLDataset"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="Sample"/>
+<parameter id="SampleExists"/>
+<parameter id="SampleIdx"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_remove_sample_from_dl_dataset">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure removes a sample from a dl dataset.</c>
+<c>* </c>
+<l>get_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>SampleIndex := find(Samples, Sample)</l>
+<l>if (SampleIndex != -1 and |SampleIndex| != 0)</l>
+<l>    Samples := remove(Samples, SampleIndex)</l>
+<l>    set_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_remove_sample_from_dl_dataset">
+<parameters>
+<parameter id="DLDataset"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_dl_dataset_remove_unnecessary_keys">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure removes all unnecessary keys from a DLDataset.</c>
+<c>* </c>
+<c>* Delete unused keys of DLDataset.</c>
+<l>ValidDLDatasetKeys := ['image_dir', 'segmentation_dir', 'dl_sample_dir', 'class_names', 'class_ids', 'class_weights', 'preprocess_param', 'samples']</l>
+<l>get_dict_param (DLDataset, 'keys', [], Keys)</l>
+<l>for Index := 0 to |Keys| - 1 by 1</l>
+<l>    tuple_find_first (ValidDLDatasetKeys, Keys[Index], KeyIndex)</l>
+<l>    if(|KeyIndex| == 0 or KeyIndex == -1)</l>
+<l>        remove_dict_key (DLDataset, Keys[Index])</l>
+<l>    endif</l>
+<l>endfor</l>
+<c>* </c>
+<c>* Delete unused keys from samples.</c>
+<l>get_dict_tuple (DLDataset, 'samples', DLSamples)</l>
+<l>ValidDLSampleKeys := ['image', 'segmentation_image', 'weight_image', 'image_file_name', 'segmentation_file_name', 'dlsample_file_name', 'image_id', \
+                      'bbox_row1', 'bbox_col1', 'bbox_row2', 'bbox_col2', \
+                      'bbox_row', 'bbox_col', 'bbox_phi', 'bbox_length1', 'bbox_length2', 'bbox_label_id', \
+                      'image_label', 'split', 'coco_raw_annotations']</l>
+<l>for Index1 := 0 to |DLSamples| - 1 by 1</l>
+<l>    Sample := DLSamples[Index1]</l>
+<l>    get_dict_param (Sample, 'keys', [], Keys)</l>
+<l>    for Index2 := 0 to |Keys| - 1 by 1</l>
+<l>        tuple_find_first (ValidDLSampleKeys, Keys[Index2], KeyIndex)</l>
+<l>        if(|KeyIndex| == 0 or KeyIndex == -1)</l>
+<l>            remove_dict_key (Sample, Keys[Index2])</l>
+<l>        endif</l>
+<l>    endfor</l>
+<l>endfor</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_dl_dataset_remove_unnecessary_keys">
+<abstract lang="en_US">This procedure removes all unnecessary keys from a DLDataset.</abstract>
+<parameters>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dict.</description>
+<mixed_type>false</mixed_type>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_dl_dataset_check_image_ids">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure checks if the image IDs within the DLDataset have been distributed uniquely.</c>
+<c>* </c>
+<l>get_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>tuple_gen_const (|Samples|, 0, ImageIDs)</l>
+<l>for Index := 0 to |Samples| - 1 by 1</l>
+<l>    get_dict_tuple (Samples[Index], 'image_id', ImageID)</l>
+<l>    ImageIDs[Index] := ImageID</l>
+<l>endfor</l>
+<c>* </c>
+<l>tuple_sort (ImageIDs, ImageIDsSorted)</l>
+<l>tuple_uniq (ImageIDsSorted, ImageIDsUnique)</l>
+<l>if (|ImageIDsUnique| != |Samples|)</l>
+<c>    * </c>
+<c>    * Find samples with same ImageID and throw exception.</c>
+<l>    for Index := 0 to |ImageIDsUnique| - 1 by 1</l>
+<l>        Occurence := ImageIDsUnique[Index] [=] ImageIDs</l>
+<l>        NumOccurance := sum(Occurence)</l>
+<l>        if (NumOccurance != 1)</l>
+<l>            tuple_find (ImageIDs, ImageIDsUnique[Index], SampleIndices)</l>
+<l>            get_dict_tuple (Samples[SampleIndices[0]], 'image_file_name', ImageName)</l>
+<l>            ImageNames := ImageName</l>
+<l>            for Index2 := 1 to NumOccurance - 1 by 1</l>
+<l>                get_dict_tuple (Samples[SampleIndices[Index2]], 'image_file_name', ImageName)</l>
+<l>                ImageNames := ImageNames + ', ' + ImageName</l>
+<l>            endfor</l>
+<c>            * </c>
+<l>            throw ('The ImageID ' + ImageIDsUnique[Index] + ' has been given to more than one image, but has to be unique. The image file names are: ' + ImageNames + '. '\
+                    + 'If this happens, please restart the program, unlabel the problematic image, and relabel the image. ' \
+                    + 'Note that all changes to the dataset have been saved, so no information gets lost.')</l>
+<l>        endif</l>
+<l>    endfor</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_dl_dataset_check_image_ids">
+<parameters>
+<parameter id="DLDataset"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_string_tuple_to_tuple">
+<interface>
+<ic>
+<par name="InputString" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="TupleOut" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>strOut := InputString</l>
+<l>tuple_regexp_replace (strOut, '\\[', '', strOut)</l>
+<l>tuple_regexp_replace (strOut, '\\]', '', strOut)</l>
+<l>tuple_split (strOut, ',', Substrings)</l>
+<l>dlt_remove_leading_zeros (Substrings, Substrings)</l>
+<l>TupleOut := number(Substrings)</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_string_tuple_to_tuple">
+<parameters>
+<parameter id="InputString"/>
+<parameter id="TupleOut"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dev_update_on">
+<interface/>
+<body>
+<c>* This procedure sets different update settings to 'on'.</c>
+<c>* </c>
+<l>dev_update_pc ('on')</l>
+<l>dev_update_var ('on')</l>
+<l>dev_update_window ('on')</l>
+<l>return ()</l>
+</body>
+<docu id="dev_update_on">
+<abstract lang="en_US">This procedure sets dev_update_pc, dev_update_var and dev_update_window to 'on'.</abstract>
+<alternatives>
+<item>dev_update_pc</item>
+<item>dev_update_var</item>
+<item>dev_update_window</item>
+</alternatives>
+<chapters lang="de_DE">
+<item>Develop</item>
+</chapters>
+<chapters lang="en_US">
+<item>Develop</item>
+</chapters>
+<example lang="en_US">dev_update_off ()
+* do something
+dev_update_on ()</example>
+<keywords lang="de_DE">
+<item>Aktualisierungsmodus setzen</item>
+</keywords>
+<keywords lang="en_US">
+<item>set update mode</item>
+</keywords>
+<library lang="de_DE">MVTec Standard Procedures</library>
+<library lang="en_US">MVTec Standard Procedures</library>
+<see_also>
+<item>dev_update_off</item>
+</see_also>
+<short lang="de_DE">Switch dev_update_pc, dev_update_var and dev_update_window to 'on'.</short>
+<short lang="en_US">Switch dev_update_pc, dev_update_var and dev_update_window to 'on'.</short>
+<parameters/>
+</docu>
+</procedure>
+<procedure name="dlt_get_sample_annotations_segmentation">
+<interface>
+<oo>
+<par name="Annotations" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="SegmentationDir" base_type="ctrl" dimension="0"/>
+<par name="ClassIDsForeground" base_type="ctrl" dimension="0"/>
+<par name="ClassIDs" base_type="ctrl" dimension="0"/>
+<par name="ClassIDToClassIdx" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="LabelIDs" base_type="ctrl" dimension="0"/>
+<par name="NumAnnotations" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the annotations of a sample for segmentation.</c>
+<c>* </c>
+<c>* In order to avoid artefacts from connection, we set a min-area here.</c>
+<l>MinArea := 10</l>
+<l>gen_empty_obj (Annotations)</l>
+<l>LabelIDs := []</l>
+<c>* </c>
+<c>* Check if the sample already has annotations. If not, try to create annotations from segmentation image.</c>
+<c>* However, if there is no segmentation image either, return empty annotations.</c>
+<l>if (Sample # HNULL)</l>
+<l>    get_dict_param (Sample, 'key_exists', ['annotation_label_id', 'annotations', 'segmentation_file_name'], KeysExist)</l>
+<l>    if (sum(KeysExist[0:1]) == 2)</l>
+<l>        get_dict_object (Annotations, Sample, 'annotations')</l>
+<l>        get_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<l>    elseif (KeysExist[2])</l>
+<l>        get_dict_tuple (Sample, 'segmentation_file_name', SegmentationFilename)</l>
+<c>        * Check if segmentation image has already been created.</c>
+<l>        file_exists (SegmentationDir + '/' + SegmentationFilename, FileExists)</l>
+<l>        FileExists := FileExists and (SegmentationFilename != '')</l>
+<l>        if (FileExists)</l>
+<l>            read_image (SegmentationImage, SegmentationDir + '/' + SegmentationFilename)</l>
+<l>            threshold (SegmentationImage, AnnotationsIn, ClassIDsForeground, ClassIDsForeground)</l>
+<l>            for IDIdx := 0 to |ClassIDsForeground| - 1 by 1</l>
+<l>                select_obj (AnnotationsIn, Annotation, IDIdx+1)</l>
+<l>                connection (Annotation, ClassAnnotations)</l>
+<l>                select_shape (ClassAnnotations, SelectedRegions, 'area', 'and', MinArea, 999999999)</l>
+<l>                count_obj (SelectedRegions, NumSelected)</l>
+<l>                concat_obj (Annotations, SelectedRegions, Annotations)</l>
+<l>                LabelIDs := [LabelIDs, gen_tuple_const(NumSelected, ClassIDs[ClassIDToClassIdx[ClassIDsForeground[IDIdx]]])]</l>
+<l>            endfor</l>
+<l>        endif</l>
+<l>    endif</l>
+<l>endif</l>
+<c>*</c>
+<c>* Set annotations.</c>
+<l>set_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<l>set_dict_object (Annotations, Sample, 'annotations')</l>
+<l>NumAnnotations := |LabelIDs|</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_get_sample_annotations_segmentation">
+<parameters>
+<parameter id="Annotations"/>
+<parameter id="ClassIDToClassIdx"/>
+<parameter id="ClassIDs"/>
+<parameter id="ClassIDsForeground"/>
+<parameter id="LabelIDs"/>
+<parameter id="NumAnnotations"/>
+<parameter id="Sample"/>
+<parameter id="SegmentationDir"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_get_sample_annotations_detection">
+<interface>
+<oo>
+<par name="Annotations" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="LabelIDs" base_type="ctrl" dimension="0"/>
+<par name="NumAnnotations" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>dlt_get_num_annotations (Sample, NumAnnotations)</l>
+<l>if (NumAnnotations)</l>
+<l>    if (RegionType == 'rectangle1' or RegionType == 'rectangle2')</l>
+<l>        get_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<l>    elseif (RegionType == 'mask')</l>
+<l>        get_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<l>    endif</l>
+<l>    dlt_create_annotation_regions_sample (Annotations, Sample, RegionType)</l>
+<l>else</l>
+<l>    gen_empty_obj (Annotations)</l>
+<l>    LabelIDs := []</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_get_sample_annotations_detection">
+<parameters>
+<parameter id="Annotations"/>
+<parameter id="LabelIDs"/>
+<parameter id="NumAnnotations"/>
+<parameter id="RegionType"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_get_sample_orientations_arrows">
+<interface>
+<oo>
+<par name="OrientationArrows" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="DatasetType" base_type="ctrl" dimension="0"/>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure returns the orientation arrows for rectangle2 annotations.</c>
+<c>* </c>
+<l>dlt_get_num_annotations (Sample, NumAnnotations)</l>
+<l>if (DatasetType == 'detection_rect2' and NumAnnotations &gt; 0)</l>
+<c>    * In case of rectangle2 detection, get orientation arrows.</c>
+<l>    HeadSize := 20</l>
+<l>    get_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>    get_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<l>    gen_arrow_contour_xld (OrientationArrows, BBRows, BBCols, BBRows - (BBLength1s + HeadSize)*sin(BBPhis), BBCols + (BBLength1s + HeadSize)*cos(BBPhis), HeadSize, HeadSize)</l>
+<l>else</l>
+<l>    gen_empty_obj (OrientationArrows)</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_get_sample_orientations_arrows">
+<parameters>
+<parameter id="DatasetType"/>
+<parameter id="OrientationArrows"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dev_display_dlt_annotations">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+<par name="Annotations" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="LabelIDs" base_type="ctrl" dimension="0"/>
+<par name="AnnotationIdx" base_type="ctrl" dimension="0"/>
+<par name="ShowOnlyOthers" base_type="ctrl" dimension="0"/>
+<par name="RefreshWindow" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>get_dict_param (LabeltoolParams, 'key_exists', 'window_handle_tmp', WindowHandleTmpExists)</l>
+<l>if (WindowHandleTmpExists)</l>
+<l>    get_dict_tuple (LabeltoolParams, 'window_handle_tmp', ImageWindowHandle)</l>
+<l>else</l>
+<l>    get_dict_tuple (LabeltoolParams, 'window_handle_image', ImageWindowHandle)    </l>
+<l>endif</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_id_to_class_idx', ClassIDToClassIdx)</l>
+<l>get_dict_tuple (LabeltoolParams, 'class_colors', ClassColors)</l>
+<l>get_dict_tuple (LabeltoolParams, 'display_region_opacity_selected', DisplayRegionOpacitySelected)</l>
+<l>get_dict_tuple (LabeltoolParams, 'display_region_opacity_unselected', DisplayRegionOpacityUnselected)</l>
+<l>get_dict_tuple (LabeltoolParams, 'display_region_opacity', DisplayRegionOpacity)</l>
+<c>*</c>
+<c>* Display image.</c>
+<l>dev_set_window (ImageWindowHandle)</l>
+<l>get_window_param (ImageWindowHandle, 'flush', FlushValue)</l>
+<l>set_window_param (ImageWindowHandle, 'flush', 'false')</l>
+<l>if (RefreshWindow)</l>
+<l>    dev_clear_window ()</l>
+<l>    get_image_size (Image, Width, Height)</l>
+<l>    dev_set_part (0, 0, Height-1, Width-1)</l>
+<l>    dev_display (Image)</l>
+<l>endif</l>
+<c>*</c>
+<c>* Display annotations.</c>
+<l>if (|LabelIDs| &gt; 0)</l>
+<l>    if (|AnnotationIdx| &gt; 0)</l>
+<l>        if (not ShowOnlyOthers)</l>
+<c>            * Display selected.</c>
+<l>            select_obj (Annotations, ObjectSelected, AnnotationIdx + 1)</l>
+<l>            dev_set_color (ClassColors[ClassIDToClassIdx[LabelIDs[AnnotationIdx]]] + DisplayRegionOpacitySelected)</l>
+<l>            dev_set_draw ('fill')</l>
+<l>            dev_display (ObjectSelected)</l>
+<l>            dev_set_line_width (3)</l>
+<l>            dev_set_draw ('margin')</l>
+<l>            dev_display (ObjectSelected)    </l>
+<l>        endif</l>
+<c>        * Display remaining.</c>
+<l>        UnselectedIdxs := remove([1:|LabelIDs|], AnnotationIdx)</l>
+<l>        if (|UnselectedIdxs| &gt; 0)</l>
+<l>            dev_set_line_width (1)</l>
+<l>            dev_set_draw ('fill')</l>
+<l>            Colors := ClassColors[ClassIDToClassIdx[LabelIDs[UnselectedIdxs-1]]] + DisplayRegionOpacityUnselected</l>
+<l>            for Index := 0 to |Colors| - 1 by 1</l>
+<l>                dev_set_color (Colors[Index])</l>
+<l>                select_obj (Annotations, ObjectSelected, UnselectedIdxs[Index])</l>
+<l>                dev_display (ObjectSelected)   </l>
+<l>            endfor</l>
+<l>        endif</l>
+<l>    else</l>
+<l>        dev_set_line_width (1)</l>
+<l>        dev_set_draw ('fill')</l>
+<l>        Colors := ClassColors[ClassIDToClassIdx[LabelIDs]] + DisplayRegionOpacity</l>
+<l>        for Index := 0 to |Colors| - 1 by 1</l>
+<l>            dev_set_color (Colors[Index])</l>
+<l>            select_obj (Annotations, ObjectSelected, Index + 1 )</l>
+<l>            dev_display (ObjectSelected)</l>
+<l>        endfor</l>
+<l>    endif</l>
+<l>endif</l>
+<c>* </c>
+<c>* Reset flush value of window.</c>
+<l>flush_buffer (ImageWindowHandle)</l>
+<l>set_window_param (ImageWindowHandle, 'flush', FlushValue)</l>
+<c>*</c>
+<l>return ()</l>
+</body>
+<docu id="dev_display_dlt_annotations">
+<parameters>
+<parameter id="AnnotationIdx"/>
+<parameter id="Annotations"/>
+<parameter id="Image"/>
+<parameter id="LabelIDs"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="RefreshWindow"/>
+<parameter id="ShowOnlyOthers"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_get_num_annotations">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="NumAnnotations" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* Get the number of annotations of this sample.</c>
+<c>* </c>
+<l>get_dict_param (Sample, 'keys', [], Keys)</l>
+<l>if (|Keys| # 0 and find(Keys,'bbox_label_id') # -1)</l>
+<l>    get_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<l>    NumAnnotations := |LabelIDs|</l>
+<l>elseif (|Keys| # 0 and find(Keys,'annotation_label_id') # -1)</l>
+<l>    get_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<l>    NumAnnotations := |LabelIDs|</l>
+<l>else</l>
+<l>     NumAnnotations := 0</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_get_num_annotations">
+<parameters>
+<parameter id="NumAnnotations"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_get_region_information_from_sample">
+<interface>
+<ic>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="AnnotationIdx" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="RegionInfo" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns any region information of the current instance that can be used for drawing /changing the annotation.</c>
+<c>* </c>
+<l>create_dict (RegionInfo)</l>
+<c>* </c>
+<l>if (RegionType == 'rectangle2')</l>
+<c>    * Check that all necessary entries are given in the sample.</c>
+<l>    Keys := ['bbox_row', 'bbox_col', 'bbox_phi', 'bbox_length1', 'bbox_length2']</l>
+<l>    get_dict_param (Sample, 'key_exists', Keys, KeysExist)</l>
+<l>    if (sum(KeysExist) == |Keys|)</l>
+<l>        get_dict_tuple (Sample, 'bbox_row', Row)</l>
+<l>        get_dict_tuple (Sample, 'bbox_col', Column)</l>
+<l>        get_dict_tuple (Sample, 'bbox_phi', Phi)</l>
+<l>        get_dict_tuple (Sample, 'bbox_length1', Length1)</l>
+<l>        get_dict_tuple (Sample, 'bbox_length2', Length2)</l>
+<c>        * </c>
+<l>        if (|Row| &gt; 0 and AnnotationIdx &lt; |Row|)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_row', Row[AnnotationIdx])</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_col', Column[AnnotationIdx])</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_phi', Phi[AnnotationIdx])</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_length1', Length1[AnnotationIdx])</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_length2', Length2[AnnotationIdx])</l>
+<l>        endif</l>
+<l>    endif</l>
+<l>else</l>
+<c>    * No other region types are supported yet --&gt; return empty dict.</c>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_get_region_information_from_sample">
+<parameters>
+<parameter id="AnnotationIdx"/>
+<parameter id="RegionInfo"/>
+<parameter id="RegionType"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dev_display_dlt_annotation_zoom_window">
+<interface>
+<io>
+<par name="Annotations" base_type="iconic" dimension="0"/>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="ZoomWindowHandle" base_type="ctrl" dimension="0"/>
+<par name="AnnotationColor" base_type="ctrl" dimension="0"/>
+<par name="AnnotationClass" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>area_center (Annotations, _, ZoomR, ZoomC)</l>
+<l>get_image_size (Image, Width, Height)</l>
+<c>* </c>
+<l>smallest_rectangle1 (Annotations, Row1, Column1, Row2, Column2)</l>
+<l>ObjWidth := Column2 - Column1 + 1</l>
+<l>ObjHeight := Row2 - Row1 + 1</l>
+<c>* </c>
+<l>TopBorder := max([ZoomR - ObjHeight/2 - 2, 0])</l>
+<l>LowerBorder := min([ZoomR + ObjHeight/2 + 2, Height - 1])</l>
+<l>LeftBorder := max([ZoomC - ObjWidth/2 - 2, 0])</l>
+<l>RightBorder := min([ZoomC + ObjWidth/2 + 2, Width - 1])</l>
+<c>* </c>
+<l>dev_set_window (ZoomWindowHandle)</l>
+<l>dev_set_line_width (1)</l>
+<l>dev_clear_window ()</l>
+<l>dev_set_part (TopBorder, LeftBorder, LowerBorder, RightBorder)</l>
+<l>dev_display (Image)</l>
+<l>dev_set_draw ('margin')</l>
+<l>dev_set_color (AnnotationColor)</l>
+<l>dev_display (Annotations)</l>
+<l>dev_disp_text (AnnotationClass, 'window', 375, 5, 'black', [], [])</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dev_display_dlt_annotation_zoom_window">
+<parameters>
+<parameter id="AnnotationClass"/>
+<parameter id="AnnotationColor"/>
+<parameter id="Annotations"/>
+<parameter id="Image"/>
+<parameter id="ZoomWindowHandle"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_select_annotation_by_click_sample">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="AnnotationsIdx" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* Get selected Annotation.</c>
+<l>get_dict_tuple (LabeltoolParams, 'region_type', RegionType)</l>
+<l>dlt_create_annotation_regions_sample (Annotations, Sample, RegionType)</l>
+<l>dlt_get_num_annotations (Sample, NumAnnotations)</l>
+<c>*</c>
+<c>* Get necessary params.</c>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_image', ImageWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_message', MessageWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_topic_colors', TopicColors)</l>
+<c>*</c>
+<l>if (NumAnnotations == 0)</l>
+<l>    dev_display_dlt_menu_message (MessageWindowHandle, 'yellow', 'Not enough regions to select!', 'centered')</l>
+<l>    get_dict_tuple (LabeltoolParams, 'wait_seconds', WaitSeconds)</l>
+<l>    wait_seconds (5 * WaitSeconds)</l>
+<l>    return ()</l>
+<l>elseif (NumAnnotations == 1)</l>
+<c>    * Nothing to do, there is only one region to click.</c>
+<l>    AnnotationsIdx := 1</l>
+<l>endif</l>
+<c>*</c>
+<l>dev_display_dlt_menu_message (MessageWindowHandle, TopicColors[1], 'Select region by left mouse-click (right to cancel)', 'centered')</l>
+<l>dev_display_dlt_sample_annotations (Image, LabeltoolParams, Sample)</l>
+<c>*</c>
+<l>while (true)</l>
+<l>    get_mbutton (ImageWindowHandle, Row, Column, Button)</l>
+<c>    * Left mouse-click: add region to selection.</c>
+<l>    if (Button == 1)</l>
+<c>        * Control that click was inside one or several regions.</c>
+<l>        gen_region_points (PointRegion, Row, Column)</l>
+<l>        intersection (Annotations, PointRegion, Intersection)</l>
+<l>        area_center (Intersection, Area, Row1, Column1)</l>
+<l>        AddIndex := find (Area[&gt;]0, 1)</l>
+<l>        if (AddIndex &gt; -1)</l>
+<l>            if (|AddIndex| &gt; 1)</l>
+<l>                RandIdx := round(rand(1) * (|AddIndex|-1))</l>
+<l>                AnnotationsIdx := AddIndex[RandIdx]</l>
+<l>            else</l>
+<l>                AnnotationsIdx := AddIndex</l>
+<l>            endif</l>
+<l>            break</l>
+<l>        endif</l>
+<l>    elseif (Button == 4)</l>
+<c>        * Right mouse click, cancel.</c>
+<l>        break</l>
+<l>    endif</l>
+<l>endwhile</l>
+<c>*</c>
+<l>return ()</l>
+</body>
+<docu id="dlt_select_annotation_by_click_sample">
+<parameters>
+<parameter id="AnnotationsIdx"/>
+<parameter id="Image"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_draw_annotation_region">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+<par name="Annotations" base_type="iconic" dimension="0"/>
+<par name="RegionIn" base_type="iconic" dimension="0"/>
+</io>
+<oo>
+<par name="RegionOut" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="LabelIDs" base_type="ctrl" dimension="0"/>
+<par name="AnnotationIdx" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+<par name="DrawingRegionType" base_type="ctrl" dimension="0"/>
+<par name="RegionInfo" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure draws the region of a new annotation. BBType determines the drawing method.</c>
+<c>* </c>
+<c>* Get some labeltool-parameters.</c>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_image', ImageWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'zoom_factor', ZoomFactor)</l>
+<l>get_dict_tuple (LabeltoolParams, 'polygon_tolerance', GetRegionPolygonTolerance)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_image_row', ImageWindowHandleRow)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_image_col', ImageWindowHandleCol)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_image_height', ImageWindowHandleHeight)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_image_width', ImageWindowHandleWidth)</l>
+<c>*</c>
+<l>dev_set_window (ImageWindowHandle)</l>
+<l>dev_update_window ('off')</l>
+<l>dev_set_line_width (1)</l>
+<c>* </c>
+<l>area_center (RegionIn, Area, _, _)</l>
+<l>if (RegionType == 'rectangle1')</l>
+<l>    if (Area == 0)</l>
+<l>        if (DrawingRegionType == 'rectangle1')</l>
+<l>            draw_rectangle1 (ImageWindowHandle, Row1, Column1, Row2, Column2)</l>
+<l>            gen_rectangle1 (RegionOut, Row1, Column1, Row2, Column2)</l>
+<l>        elseif (DrawingRegionType == 'mask')</l>
+<l>            draw_region (RegionTmp, ImageWindowHandle)</l>
+<l>            smallest_rectangle1 (RegionTmp, Row1, Column1, Row2, Column2)</l>
+<l>            gen_rectangle1 (RegionOut, Row1, Column1, Row2, Column2)</l>
+<l>        endif</l>
+<l>    else</l>
+<l>        gen_contour_region_xld (RegionIn, XLD, 'border')</l>
+<l>        smallest_rectangle1_xld (XLD, Row1, Column1, Row2, Column2)</l>
+<l>        create_drawing_object_rectangle1 (Row1, Column1, Row2, Column2, DrawID)</l>
+<l>        dev_open_window (ImageWindowHandleRow, ImageWindowHandleCol, ImageWindowHandleWidth, ImageWindowHandleHeight,'black', WindowHandleTmp)</l>
+<l>        set_dict_tuple (LabeltoolParams, 'window_handle_tmp', WindowHandleTmp)</l>
+<c>        * Display all other detections.</c>
+<l>        dev_display_dlt_annotations (Image, Annotations, LabeltoolParams, LabelIDs, AnnotationIdx, true, true)</l>
+<c>        * </c>
+<l>        dlt_attach_region_proposal (Image, RegionOut, WindowHandleTmp, DrawID, Exception)</l>
+<l>        clear_drawing_object (DrawID)</l>
+<l>        dev_close_window ()</l>
+<l>        remove_dict_key (LabeltoolParams, 'window_handle_tmp')</l>
+<l>    endif</l>
+<l>elseif (RegionType == 'rectangle2')</l>
+<l>    if (Area == 0)</l>
+<l>        if (DrawingRegionType == 'rectangle1')</l>
+<l>            draw_rectangle1 (ImageWindowHandle, Row1, Column1, Row2, Column2)</l>
+<l>            gen_rectangle1 (RegionOut, Row1, Column1, Row2, Column2)</l>
+<c>            * In addition, fill RegionInfo with rectangle2 parameters.</c>
+<c>            * Note that RegionInfo keeps the information in pixel coordinates.</c>
+<l>            set_dict_tuple (RegionInfo, 'bbox_row', (Row1 + Row2)/2.0)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_col', (Column1 + Column2)/2.0)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_phi', 0)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_length1', (Column2 - Column1)/2.0)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_length2', (Row2 - Row1)/2.0)</l>
+<l>        elseif (DrawingRegionType == 'rectangle2')</l>
+<l>            draw_rectangle2 (ImageWindowHandle, Row, Column, Phi, Length1, Length2)</l>
+<l>            gen_rectangle2 (RegionOut, Row, Column, Phi, Length1, Length2)</l>
+<c>            * In addition, fill RegionInfo with rectangle2 parameters.</c>
+<l>            set_dict_tuple (RegionInfo, 'bbox_row', Row)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_col', Column)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_phi', Phi)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_length1', Length1)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_length2', Length2)</l>
+<l>        elseif (DrawingRegionType == 'mask')</l>
+<l>            draw_region (RegionTmp, ImageWindowHandle)</l>
+<l>            smallest_rectangle2 (RegionTmp, Row, Column, Phi, Length1, Length2)</l>
+<l>            gen_rectangle2 (RegionOut, Row, Column, Phi, Length1, Length2)</l>
+<c>            * In addition, fill RegionInfo with rectangle2 parameters.</c>
+<l>            set_dict_tuple (RegionInfo, 'bbox_row', Row)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_col', Column)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_phi', Phi)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_length1', Length1)</l>
+<l>            set_dict_tuple (RegionInfo, 'bbox_length2', Length2)</l>
+<l>        endif</l>
+<l>    else</l>
+<c>        * For displaying, just use rectangle2 format.</c>
+<c>        * Get information from RegionInfo in order to keep orientation.</c>
+<l>        get_dict_tuple (RegionInfo, 'bbox_row', Row)</l>
+<l>        get_dict_tuple (RegionInfo, 'bbox_col', Column)</l>
+<l>        get_dict_tuple (RegionInfo, 'bbox_phi', Phi)</l>
+<l>        get_dict_tuple (RegionInfo, 'bbox_length1', Length1)</l>
+<l>        get_dict_tuple (RegionInfo, 'bbox_length2', Length2)</l>
+<l>        create_drawing_object_rectangle2 (Row, Column, Phi, Length1, Length2, DrawID)</l>
+<l>        dev_open_window (ImageWindowHandleRow, ImageWindowHandleCol, ImageWindowHandleWidth, ImageWindowHandleHeight,'black', WindowHandleTmp)</l>
+<l>        set_dict_tuple (LabeltoolParams, 'window_handle_tmp', WindowHandleTmp)</l>
+<c>        * Display all other detections.</c>
+<l>        dev_display_dlt_annotations (Image, Annotations, LabeltoolParams, LabelIDs, AnnotationIdx, true, true)</l>
+<c>        * </c>
+<l>        dlt_attach_region_proposal (Image, RegionOut, WindowHandleTmp, DrawID, Exception)</l>
+<l>        get_drawing_object_params (DrawID, 'row', Row)</l>
+<l>        get_drawing_object_params (DrawID, 'column', Column)</l>
+<l>        get_drawing_object_params (DrawID, 'phi', Phi)</l>
+<l>        get_drawing_object_params (DrawID, 'length1', Length1)</l>
+<l>        get_drawing_object_params (DrawID, 'length2', Length2)</l>
+<l>        clear_drawing_object (DrawID)</l>
+<c>        * In addition, fill RegionInfo new rectangle2 parameters (in pixel coordinates).</c>
+<l>        set_dict_tuple (RegionInfo, 'bbox_row', Row)</l>
+<l>        set_dict_tuple (RegionInfo, 'bbox_col', Column)</l>
+<l>        set_dict_tuple (RegionInfo, 'bbox_phi', Phi)</l>
+<l>        set_dict_tuple (RegionInfo, 'bbox_length1', Length1 - 0.5)</l>
+<l>        set_dict_tuple (RegionInfo, 'bbox_length2', Length2 - 0.5)</l>
+<c>        *</c>
+<l>        dev_close_window ()</l>
+<l>        remove_dict_key (LabeltoolParams, 'window_handle_tmp')</l>
+<l>    endif</l>
+<l>elseif (RegionType == 'ellipse')</l>
+<l>    if (Area == 0)</l>
+<l>        draw_ellipse (ImageWindowHandle, Row, Column, Phi, Radius1, Radius2)</l>
+<l>        gen_ellipse (RegionOut, Row, Column, Phi, Radius1, Radius2)</l>
+<l>    else</l>
+<c>        * Changing ellipse region not supported at the moment.</c>
+<l>        RegionOut := RegionIn</l>
+<l>    endif</l>
+<l>else</l>
+<c>    * Option 'mask'.</c>
+<l>    if (Area == 0)</l>
+<l>        draw_region (RegionOut, ImageWindowHandle)</l>
+<l>    else</l>
+<c>        * Make sure that we only have a single connected component.</c>
+<l>        connection(RegionIn, ConnectedRegions)</l>
+<l>        count_obj (ConnectedRegions, NumComponents)</l>
+<l>        if (NumComponents &gt; 1)</l>
+<l>            area_center (ConnectedRegions, Area, _, _)</l>
+<c>            * We just keep the largest connected component.</c>
+<l>            CompToKeep := find(Area[=]max(Area), 1) + 1</l>
+<l>            select_obj (ConnectedRegions, RegionIn, CompToKeep)</l>
+<l>        endif</l>
+<l>        zoom_region (Annotations, AnnotationsZoomed, ZoomFactor, ZoomFactor)</l>
+<l>        zoom_region (RegionIn, RegionZoom, ZoomFactor, ZoomFactor)</l>
+<l>        zoom_image_factor (Image, ImageZoomed, ZoomFactor, ZoomFactor, 'constant')</l>
+<l>        get_region_polygon (RegionZoom, GetRegionPolygonTolerance, Rows, Columns)</l>
+<l>        create_drawing_object_xld (Rows, Columns, DrawID)</l>
+<l>        dev_open_window (ImageWindowHandleRow, ImageWindowHandleCol, ImageWindowHandleWidth, ImageWindowHandleHeight,'black', WindowHandleTmp)</l>
+<l>        set_dict_tuple (LabeltoolParams, 'window_handle_tmp', WindowHandleTmp)</l>
+<c>        * Display all other detections.</c>
+<l>        dev_display_dlt_annotations (ImageZoomed, AnnotationsZoomed, LabeltoolParams, LabelIDs, AnnotationIdx, true, true)</l>
+<c>        * </c>
+<c>        * Possibility to change points, wait for right click, then continue.</c>
+<l>        dlt_attach_region_proposal (ImageZoomed, RegionOut, WindowHandleTmp, DrawID, Exception)</l>
+<l>        zoom_region (RegionOut, RegionOut, 1/real(ZoomFactor), 1/real(ZoomFactor))</l>
+<l>        clear_drawing_object (DrawID)</l>
+<l>        dev_close_window ()</l>
+<l>        remove_dict_key (LabeltoolParams, 'window_handle_tmp')</l>
+<l>    endif</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+<c></c>
+<c></c>
+</body>
+<docu id="dlt_draw_annotation_region">
+<parameters>
+<parameter id="AnnotationIdx"/>
+<parameter id="Annotations"/>
+<parameter id="DrawingRegionType"/>
+<parameter id="Image"/>
+<parameter id="LabelIDs"/>
+<parameter id="LabeltoolParams"/>
+<parameter id="RegionIn"/>
+<parameter id="RegionInfo"/>
+<parameter id="RegionOut"/>
+<parameter id="RegionType"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_add_annotation_to_sample">
+<interface>
+<io>
+<par name="Annotation" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="LabelID" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+<par name="DrawingRegionType" base_type="ctrl" dimension="0"/>
+<par name="RegionInfo" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure adds an annotation to a sample.</c>
+<c>* </c>
+<l>get_dict_param (Sample, 'keys', [], Keys)</l>
+<l>if (RegionType == 'rectangle1')</l>
+<c>    * </c>
+<l>    smallest_rectangle1 (Annotation, BBRow1, BBCol1, BBRow2, BBCol2)</l>
+<c>    * </c>
+<c>    * Note that the BBox coordinates are safed in XLD format.</c>
+<l>    if (find(Keys,'bbox_label_id') == -1)</l>
+<l>        set_dict_tuple (Sample, 'bbox_row1', BBRow1 - 0.5)</l>
+<l>        set_dict_tuple (Sample, 'bbox_col1', BBCol1 - 0.5)</l>
+<l>        set_dict_tuple (Sample, 'bbox_row2', BBRow2 + 0.5)</l>
+<l>        set_dict_tuple (Sample, 'bbox_col2', BBCol2 + 0.5)</l>
+<l>        set_dict_tuple (Sample, 'bbox_label_id', LabelID)</l>
+<l>    else</l>
+<c>        * Get current values.</c>
+<l>        get_dict_tuple (Sample, 'bbox_row1', BBRow1s)</l>
+<l>        get_dict_tuple (Sample, 'bbox_col1', BBCol1s)</l>
+<l>        get_dict_tuple (Sample, 'bbox_row2', BBRow2s)</l>
+<l>        get_dict_tuple (Sample, 'bbox_col2', BBCol2s)</l>
+<l>        get_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<c>        *</c>
+<c>        * Append current values.</c>
+<l>        set_dict_tuple (Sample, 'bbox_row1', [BBRow1s, BBRow1 - 0.5])</l>
+<l>        set_dict_tuple (Sample, 'bbox_col1', [BBCol1s, BBCol1 - 0.5])</l>
+<l>        set_dict_tuple (Sample, 'bbox_row2', [BBRow2s, BBRow2 + 0.5])</l>
+<l>        set_dict_tuple (Sample, 'bbox_col2', [BBCol2s, BBCol2 + 0.5])</l>
+<l>        set_dict_tuple (Sample, 'bbox_label_id', [LabelIDs, LabelID])</l>
+<l>    endif</l>
+<l>elseif (RegionType == 'rectangle2')</l>
+<c>    *</c>
+<c>    * Use RegionInfo in order to keep the orientation.</c>
+<l>    get_dict_tuple (RegionInfo, 'bbox_row', BBRow)</l>
+<l>    get_dict_tuple (RegionInfo, 'bbox_col', BBCol)</l>
+<l>    get_dict_tuple (RegionInfo, 'bbox_phi', BBPhi)</l>
+<l>    get_dict_tuple (RegionInfo, 'bbox_length1', BBLength1)</l>
+<l>    get_dict_tuple (RegionInfo, 'bbox_length2', BBLength2)</l>
+<c>    * </c>
+<c>    * Note that the BBox coordinates are safed in XLD format.</c>
+<l>    if (find(Keys,'bbox_label_id') == -1)</l>
+<c>        * Use RegionInfo in order to keep the orientation.</c>
+<l>        set_dict_tuple (Sample, 'bbox_row', BBRow)</l>
+<l>        set_dict_tuple (Sample, 'bbox_col', BBCol)</l>
+<l>        set_dict_tuple (Sample, 'bbox_phi', BBPhi)</l>
+<l>        set_dict_tuple (Sample, 'bbox_length1', BBLength1 + 0.5)</l>
+<l>        set_dict_tuple (Sample, 'bbox_length2', BBLength2 + 0.5)</l>
+<l>        set_dict_tuple (Sample, 'bbox_label_id', LabelID)</l>
+<l>    else</l>
+<c>        * Get current values.</c>
+<l>        get_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>        get_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>        get_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>        get_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>        get_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<l>        get_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<c>        *</c>
+<c>        * Append current values.</c>
+<l>        set_dict_tuple (Sample, 'bbox_row', [BBRows, BBRow])</l>
+<l>        set_dict_tuple (Sample, 'bbox_col', [BBCols, BBCol])</l>
+<l>        set_dict_tuple (Sample, 'bbox_phi', [BBPhis, BBPhi])</l>
+<l>        set_dict_tuple (Sample, 'bbox_length1', [BBLength1s, BBLength1 + 0.5])</l>
+<l>        set_dict_tuple (Sample, 'bbox_length2', [BBLength2s, BBLength2 + 0.5])</l>
+<l>        set_dict_tuple (Sample, 'bbox_label_id', [LabelIDs, LabelID])</l>
+<l>    endif</l>
+<l>elseif (RegionType == 'mask' or RegionType == 'ellipse')</l>
+<l>    if (find(Keys, 'annotations') == -1)</l>
+<l>        gen_empty_obj (Annotations)</l>
+<l>        concat_obj (Annotations, Annotation, Annotations)</l>
+<l>        set_dict_object (Annotations, Sample, 'annotations')</l>
+<l>        set_dict_tuple (Sample, 'annotation_label_id', LabelID)</l>
+<l>    else</l>
+<c>        * Get current values.</c>
+<l>        get_dict_object (Annotations, Sample, 'annotations')</l>
+<l>        get_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<c>        *</c>
+<c>        * Append new annotation.</c>
+<l>        concat_obj (Annotations, Annotation, Annotations)</l>
+<l>        set_dict_object (Annotations, Sample, 'annotations')</l>
+<l>        set_dict_tuple (Sample, 'annotation_label_id', [LabelIDs, LabelID])</l>
+<l>    endif</l>
+<l>else</l>
+<l>    throw ('Unsupported region type: ' + RegionType)</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_add_annotation_to_sample">
+<parameters>
+<parameter id="Annotation"/>
+<parameter id="DrawingRegionType"/>
+<parameter id="LabelID"/>
+<parameter id="RegionInfo">
+<default_type>integer</default_type>
+<mixed_type>false</mixed_type>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="RegionType"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_replace_annotation_in_sample">
+<interface>
+<io>
+<par name="Annotation" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="LabelID" base_type="ctrl" dimension="0"/>
+<par name="AnnotationsIdx" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+<par name="RegionInfo" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Tis procedure replaces an annotation in a sample.</c>
+<c>* </c>
+<l>dlt_get_num_annotations (Sample, NumAnnotations)</l>
+<c>*</c>
+<l>if (AnnotationsIdx &lt; 0 or AnnotationsIdx &gt;= NumAnnotations)</l>
+<l>    throw (['AnnotationID is invalid'])</l>
+<l>endif</l>
+<c>*</c>
+<l>if (RegionType == 'rectangle1')</l>
+<c>    * Get current values.</c>
+<l>    get_dict_tuple (Sample, 'bbox_row1', BBRow1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col1', BBCol1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_row2', BBRow2s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col2', BBCol2s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<c>    *</c>
+<l>    gen_contour_region_xld (Annotation, Contour, 'border')</l>
+<l>    smallest_rectangle1_xld (Contour, Row1, Column1, Row2, Column2)</l>
+<c>    * Manipulate the data</c>
+<l>    BBRow1s[AnnotationsIdx] := Row1</l>
+<l>    BBCol1s[AnnotationsIdx] := Column1</l>
+<l>    BBRow2s[AnnotationsIdx] := Row2</l>
+<l>    BBCol2s[AnnotationsIdx] := Column2</l>
+<l>    LabelIDs[AnnotationsIdx] := LabelID</l>
+<c>    *</c>
+<c>    * Set the data.</c>
+<l>    set_dict_tuple (Sample, 'bbox_row1', BBRow1s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_col1', BBCol1s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_row2', BBRow2s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_col2', BBCol2s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_label_id', [LabelIDs])</l>
+<l>elseif (RegionType == 'rectangle2')</l>
+<c>    * Get current values.</c>
+<l>    get_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>    get_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<c>    * Get new region parameters from RegionInfo in order to keep orientation.</c>
+<l>    get_dict_tuple (RegionInfo, 'bbox_row', BBRow)</l>
+<l>    get_dict_tuple (RegionInfo, 'bbox_col', BBCol)</l>
+<l>    get_dict_tuple (RegionInfo, 'bbox_phi', BBPhi)</l>
+<l>    get_dict_tuple (RegionInfo, 'bbox_length1', BBLength1)</l>
+<l>    get_dict_tuple (RegionInfo, 'bbox_length2', BBLength2)</l>
+<c>    * Manipulate the data</c>
+<l>    BBRows[AnnotationsIdx] := BBRow</l>
+<l>    BBCols[AnnotationsIdx] := BBCol</l>
+<l>    BBPhis[AnnotationsIdx] := BBPhi</l>
+<l>    BBLength1s[AnnotationsIdx] := BBLength1</l>
+<l>    BBLength2s[AnnotationsIdx] := BBLength2</l>
+<l>    LabelIDs[AnnotationsIdx] := LabelID</l>
+<c>    *</c>
+<c>    * Set the data.</c>
+<l>    set_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>    set_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>    set_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>    set_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<l>elseif (RegionType == 'mask')</l>
+<c>    * Get current values.</c>
+<l>    get_dict_object (Annotations, Sample, 'annotations')</l>
+<l>    get_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<c>    *</c>
+<c>    * Manipulate the data</c>
+<l>    replace_obj (Annotations, Annotation, Annotations, AnnotationsIdx + 1)</l>
+<l>    LabelIDs[AnnotationsIdx] := LabelID</l>
+<c>    * Set the data.</c>
+<l>    set_dict_object (Annotations, Sample, 'annotations')</l>
+<l>    set_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<l>else</l>
+<l>    throw ('Unsupported region type: ' + RegionType)</l>
+<l>endif</l>
+<c>*</c>
+<l>return ()</l>
+</body>
+<docu id="dlt_replace_annotation_in_sample">
+<parameters>
+<parameter id="Annotation"/>
+<parameter id="AnnotationsIdx"/>
+<parameter id="LabelID"/>
+<parameter id="RegionInfo"/>
+<parameter id="RegionType"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_change_annotation_type">
+<interface>
+<io>
+<par name="Annotation" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="LabeltoolParams" base_type="ctrl" dimension="0"/>
+<par name="ClassNames" base_type="ctrl" dimension="0"/>
+<par name="ClassIDs" base_type="ctrl" dimension="0"/>
+<par name="TopicColors" base_type="ctrl" dimension="0"/>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="AnnotationIdx" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="DataChanged" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure changes the type of an already set annotation in the image.</c>
+<c>* </c>
+<c>* Get parameters from LabeltoolParams.</c>
+<l>get_dict_tuple (LabeltoolParams, 'wait_seconds', WaitSeconds)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_message', MessageWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_message', ImageWindowHandle)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_class_row', ClassWindowRow)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_class_col', ClassWindowCol)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_class_width', ClassWindowWidth)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_class_height', ClassWindowHeight)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_class_num_columns', ClassWindowNumColumns)</l>
+<l>get_dict_tuple (LabeltoolParams, 'window_handle_class_columns_widths', ColumnWitdhs)</l>
+<l>for Index := 0 to ClassWindowNumColumns - 1 by 1</l>
+<l>    get_dict_tuple (LabeltoolParams, 'window_handle_class_string_columns_' + Index, ClassNamesWithIndexColumns.at(Index))</l>
+<l>endfor</l>
+<c>* </c>
+<c>* Open Window and display classes.</c>
+<l>dev_open_window (ClassWindowRow, ClassWindowCol, ClassWindowWidth, ClassWindowHeight, 'black', ClassWindowHandle)</l>
+<l>Column := 12</l>
+<l>for Index := 0 to ClassWindowNumColumns - 1 by 1</l>
+<l>    dev_disp_text (ClassNamesWithIndexColumns.at(Index), 'window', 12, Column, 'black', [], [])</l>
+<l>    Column := Column + ColumnWitdhs[Index] + 12</l>
+<l>endfor</l>
+<c>*</c>
+<l>MenuMessageText := 'Select the class by its index and approve with return: '</l>
+<l>dev_display_dlt_menu_message (MessageWindowHandle, TopicColors[1], MenuMessageText, 'centered')</l>
+<l>read_char (ImageWindowHandle, Char, Code)</l>
+<l>ClassIdxChar := ''</l>
+<c>* Leave the input mode if either the escape button is pressed or the return button was pressed after an input.</c>
+<l>while( not ((Char == '\r' and ClassIdxChar != '') or Char == '\x1b'))</l>
+<l>    MenuMessageColor := TopicColors[1]</l>
+<c>    * Show error if input is not a number and delete the last input with the delete button.</c>
+<l>    ErrorMessage := 'You did not enter a valid type idx. Please try again and approve with return: '</l>
+<l>    if (Char == '')</l>
+<l>        MenuMessageText := ErrorMessage</l>
+<l>        MenuMessageColor := TopicColors[3]</l>
+<l>        ClassIdxChar := ''</l>
+<l>    elseif (ord('0') &lt;= ord(Char) and ord(Char) &lt;= ord('9'))</l>
+<l>        ClassIdxChar := ClassIdxChar + Char</l>
+<l>    elseif (Char == '\b' and ClassIdxChar != '')</l>
+<c>        * If there are no inputs left to delete, show an empty string.</c>
+<l>        if (strlen(ClassIdxChar) == 1)</l>
+<l>            ClassIdxChar := ''</l>
+<l>        else</l>
+<l>            ClassIdxChar := ClassIdxChar{0 : strlen(ClassIdxChar) - 2}</l>
+<l>        endif</l>
+<l>    else</l>
+<l>        MenuMessageText := ErrorMessage</l>
+<l>        MenuMessageColor := TopicColors[3]</l>
+<l>        ClassIdxChar := ''</l>
+<l>    endif</l>
+<l>    dev_display_dlt_menu_message (MessageWindowHandle, MenuMessageColor, MenuMessageText + ClassIdxChar, 'centered')</l>
+<l>    read_char (ImageWindowHandle, Char, Code)</l>
+<l>endwhile</l>
+<l>if (Char == '\r')</l>
+<l>    ClassIdx := number(ClassIdxChar)</l>
+<l>endif</l>
+<c>* </c>
+<c>* Close window showing class names.</c>
+<l>dev_set_window (ClassWindowHandle)</l>
+<l>dev_close_window ()</l>
+<l>try </l>
+<l>    Type := ClassNames[number(ClassIdx)]</l>
+<l>catch (Exception)</l>
+<l>    dev_display_dlt_menu_message (MessageWindowHandle, 'red', 'invalid class-index', 'centered')</l>
+<l>    wait_seconds (10 * WaitSeconds)</l>
+<l>    return ()</l>
+<l>endtry</l>
+<c>* </c>
+<c>* Call replace procedure. It will take care of changing the label.</c>
+<c>* Before, create a RegionInfo for the current annotation in case of rectangle2.</c>
+<l>create_dict (RegionInfo)</l>
+<l>if (RegionType == 'rectangle2')</l>
+<l>    get_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>    get_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_row', BBRows[AnnotationIdx])</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_col', BBCols[AnnotationIdx])</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_phi', BBPhis[AnnotationIdx])</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_length1', BBLength1s[AnnotationIdx])</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_length2', BBLength2s[AnnotationIdx])</l>
+<l>endif</l>
+<c>* </c>
+<l>dlt_replace_annotation_in_sample (Annotation, Sample, ClassIDs[number(ClassIdx)], AnnotationIdx, RegionType, RegionInfo)</l>
+<l>DataChanged := 1</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_change_annotation_type">
+<short lang="de_DE">Change the type of an annotation.</short>
+<parameters>
+<parameter id="Annotation"/>
+<parameter id="AnnotationIdx"/>
+<parameter id="ClassIDs"/>
+<parameter id="ClassNames"/>
+<parameter id="DataChanged"/>
+<parameter id="LabeltoolParams">
+<default_type>integer</default_type>
+<mixed_type>false</mixed_type>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="RegionType"/>
+<parameter id="Sample"/>
+<parameter id="TopicColors"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_change_orientation">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="AnnotationIdx" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="RegionInfo" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure changes the orientation of rectangle2 bboxes.</c>
+<c>* </c>
+<l>create_dict (RegionInfo)</l>
+<l>if (RegionType == 'rectangle2')</l>
+<l>    get_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>    get_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<c>    * Swap lengths.</c>
+<l>    BBLength1 := BBLength2s[AnnotationIdx]</l>
+<l>    BBLength2 := BBLength1s[AnnotationIdx]</l>
+<l>    BBPhi := BBPhis[AnnotationIdx] + rad(90)</l>
+<c>    * Ensure that phi is in the range (-180*, 180°], hence substract 360° if angle is larger than 180°.</c>
+<l>    BBPhi := BBPhi - (BBPhi[&gt;]rad(180)) * rad(360)</l>
+<c>    * </c>
+<l>    set_dict_tuple (RegionInfo, 'bbox_row', BBRows[AnnotationIdx])</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_col', BBCols[AnnotationIdx])</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_phi', BBPhi)</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_length1', BBLength1)</l>
+<l>    set_dict_tuple (RegionInfo, 'bbox_length2', BBLength2)</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_change_orientation">
+<parameters>
+<parameter id="AnnotationIdx"/>
+<parameter id="RegionInfo"/>
+<parameter id="RegionType"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_remove_annotation_in_sample">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="AnnotationIdx" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* Remove the annotation with AnnotationIdx from the sample.</c>
+<c>*</c>
+<l>dlt_get_num_annotations (Sample, NumAnnotations)</l>
+<c>*</c>
+<l>if (AnnotationIdx &lt; 0 or AnnotationIdx &gt;= NumAnnotations)</l>
+<l>    throw (['AnnotationID is invalid'])</l>
+<l>endif</l>
+<l>if (RegionType == 'rectangle1')</l>
+<c>    * get current values.</c>
+<l>    get_dict_tuple (Sample, 'bbox_row1', BBRow1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col1', BBCol1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_row2', BBRow2s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col2', BBCol2s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<c>    * remove the respective values.</c>
+<l>    tuple_remove (BBRow1s, AnnotationIdx, BBRow1s)</l>
+<l>    tuple_remove (BBCol1s, AnnotationIdx, BBCol1s)</l>
+<l>    tuple_remove (BBRow2s, AnnotationIdx, BBRow2s)</l>
+<l>    tuple_remove (BBCol2s, AnnotationIdx, BBCol2s)</l>
+<l>    tuple_remove (LabelIDs, AnnotationIdx, LabelIDs)</l>
+<c>    * set the respective values.</c>
+<l>    set_dict_tuple (Sample, 'bbox_row1', BBRow1s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_col1', BBCol1s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_row2', BBRow2s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_col2', BBCol2s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_label_id', [LabelIDs])</l>
+<l>elseif (RegionType == 'rectangle2')</l>
+<c>    * get current values.</c>
+<l>    get_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>    get_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<c>    * remove the respective values.</c>
+<l>    tuple_remove (BBRows, AnnotationIdx, BBRows)</l>
+<l>    tuple_remove (BBCols, AnnotationIdx, BBCols)</l>
+<l>    tuple_remove (BBPhis, AnnotationIdx, BBPhis)</l>
+<l>    tuple_remove (BBLength1s, AnnotationIdx, BBLength1s)</l>
+<l>    tuple_remove (BBLength2s, AnnotationIdx, BBLength2s)</l>
+<l>    tuple_remove (LabelIDs, AnnotationIdx, LabelIDs)</l>
+<c>    * set the respective values.</c>
+<l>    set_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>    set_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>    set_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>    set_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<l>    set_dict_tuple (Sample, 'bbox_label_id', LabelIDs)</l>
+<l>elseif (RegionType == 'mask')</l>
+<c>    * get current values.</c>
+<l>    get_dict_object (Annotations, Sample, 'annotations')</l>
+<l>    get_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<c>    * remove the respective annotation.</c>
+<l>    remove_obj (Annotations, Annotations, AnnotationIdx + 1)</l>
+<l>    tuple_remove (LabelIDs, AnnotationIdx, LabelIDs)</l>
+<c>    * set respective annotation.</c>
+<l>    set_dict_object (Annotations, Sample, 'annotations')</l>
+<l>    set_dict_tuple (Sample, 'annotation_label_id', LabelIDs)</l>
+<l>else</l>
+<l>    throw ('Unsupported region type: ' + RegionType)</l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_remove_annotation_in_sample">
+<short lang="de_DE">Remove the detection with DetectionIdx from the sample.</short>
+<parameters>
+<parameter id="AnnotationIdx"/>
+<parameter id="RegionType"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_find_closest_annotation_in_sample">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="Row" base_type="ctrl" dimension="0"/>
+<par name="Column" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="AnnotationIdx" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure finds the closest annotation in an sample.</c>
+<c>* </c>
+<l>dlt_create_annotation_regions_sample (Annotations, Sample, RegionType)</l>
+<l>area_center (Annotations, _, Rows, Cols)</l>
+<l>Dist := sqrt(pow(Rows - Row, 2) + pow(Cols - Column, 2))</l>
+<l>AnnotationIdx := find(Dist, min(Dist))</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_find_closest_annotation_in_sample">
+<parameters>
+<parameter id="AnnotationIdx"/>
+<parameter id="Column"/>
+<parameter id="RegionType"/>
+<parameter id="Row"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_remove_leading_zeros">
+<interface>
+<ic>
+<par name="String" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="OutString" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This script removes the leading zeros from a string</c>
+<c>* e.g '036' becomes '36'.</c>
+<c>* </c>
+<l>for Index := 0 to |String|-1 by 1</l>
+<l>    tmpString := String[Index]</l>
+<l>    while (tmpString{0} == '0' and strlen(tmpString) &gt; 1)</l>
+<l>        tuple_str_last_n(tmpString, 1, tmpString)</l>
+<l>    endwhile</l>
+<l>    OutString[Index] := tmpString</l>
+<l>endfor</l>
+<c>*</c>
+<l>return ()</l>
+</body>
+<docu id="dlt_remove_leading_zeros">
+<parameters>
+<parameter id="OutString"/>
+<parameter id="String"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_create_annotation_regions_sample">
+<interface>
+<oo>
+<par name="Annotations" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="RegionType" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>if (RegionType == 'rectangle1')</l>
+<l>    get_dict_tuple (Sample, 'bbox_row1', BBRow1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col1', BBCol1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_row2', BBRow2s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col2', BBCol2s)</l>
+<c>    * Transform bounding box coordinates from XLD format to pixel-precise format.</c>
+<l>    BBRow1s := BBRow1s + 0.5</l>
+<l>    BBCol1s := BBCol1s + 0.5</l>
+<l>    BBRow2s := BBRow2s - 0.5</l>
+<l>    BBCol2s := BBCol2s - 0.5</l>
+<l>    gen_rectangle1 (Annotations, BBRow1s, BBCol1s, BBRow2s, BBCol2s)</l>
+<l>elseif (RegionType == 'rectangle2')</l>
+<l>    get_dict_tuple (Sample, 'bbox_row', BBRows)</l>
+<l>    get_dict_tuple (Sample, 'bbox_col', BBCols)</l>
+<l>    get_dict_tuple (Sample, 'bbox_phi', BBPhis)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length1', BBLength1s)</l>
+<l>    get_dict_tuple (Sample, 'bbox_length2', BBLength2s)</l>
+<c>    * Transform bounding box coordinates from XLD format to pixel-precise format.</c>
+<l>    BBLength1s := BBLength1s - 0.5</l>
+<l>    BBLength2s := BBLength2s - 0.5</l>
+<l>    gen_rectangle2 (Annotations, BBRows, BBCols, BBPhis, BBLength1s, BBLength2s)</l>
+<l>elseif (RegionType == 'mask')</l>
+<l>    get_dict_object (Annotations, Sample, 'annotations')</l>
+<l>else</l>
+<l>    throw ('Unsupported region type: ' + RegionType)    </l>
+<l>endif</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_create_annotation_regions_sample">
+<parameters>
+<parameter id="Annotations"/>
+<parameter id="RegionType"/>
+<parameter id="Sample"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="gen_arrow_contour_xld">
+<interface>
+<oo>
+<par name="Arrow" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="Row1" base_type="ctrl" dimension="0"/>
+<par name="Column1" base_type="ctrl" dimension="0"/>
+<par name="Row2" base_type="ctrl" dimension="0"/>
+<par name="Column2" base_type="ctrl" dimension="0"/>
+<par name="HeadLength" base_type="ctrl" dimension="0"/>
+<par name="HeadWidth" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure generates arrow shaped XLD contours,</c>
+<c>* pointing from (Row1, Column1) to (Row2, Column2).</c>
+<c>* If starting and end point are identical, a contour consisting</c>
+<c>* of a single point is returned.</c>
+<c>* </c>
+<c>* input parameteres:</c>
+<c>* Row1, Column1: Coordinates of the arrows' starting points</c>
+<c>* Row2, Column2: Coordinates of the arrows' end points</c>
+<c>* HeadLength, HeadWidth: Size of the arrow heads in pixels</c>
+<c>* </c>
+<c>* output parameter:</c>
+<c>* Arrow: The resulting XLD contour</c>
+<c>* </c>
+<c>* The input tuples Row1, Column1, Row2, and Column2 have to be of</c>
+<c>* the same length.</c>
+<c>* HeadLength and HeadWidth either have to be of the same length as</c>
+<c>* Row1, Column1, Row2, and Column2 or have to be a single element.</c>
+<c>* If one of the above restrictions is violated, an error will occur.</c>
+<c>* </c>
+<c>* </c>
+<c>* Init</c>
+<l>gen_empty_obj (Arrow)</l>
+<c>* </c>
+<c>* Calculate the arrow length</c>
+<l>distance_pp (Row1, Column1, Row2, Column2, Length)</l>
+<c>* </c>
+<c>* Mark arrows with identical start and end point</c>
+<c>* (set Length to -1 to avoid division-by-zero exception)</c>
+<l>ZeroLengthIndices := find(Length,0)</l>
+<l>if (ZeroLengthIndices != -1)</l>
+<l>    Length[ZeroLengthIndices] := -1</l>
+<l>endif</l>
+<c>* </c>
+<c>* Calculate auxiliary variables.</c>
+<l>DR := 1.0 * (Row2 - Row1) / Length</l>
+<l>DC := 1.0 * (Column2 - Column1) / Length</l>
+<l>HalfHeadWidth := HeadWidth / 2.0</l>
+<c>* </c>
+<c>* Calculate end points of the arrow head.</c>
+<l>RowP1 := Row1 + (Length - HeadLength) * DR + HalfHeadWidth * DC</l>
+<l>ColP1 := Column1 + (Length - HeadLength) * DC - HalfHeadWidth * DR</l>
+<l>RowP2 := Row1 + (Length - HeadLength) * DR - HalfHeadWidth * DC</l>
+<l>ColP2 := Column1 + (Length - HeadLength) * DC + HalfHeadWidth * DR</l>
+<c>* </c>
+<c>* Finally create output XLD contour for each input point pair</c>
+<l>for Index := 0 to |Length| - 1 by 1</l>
+<l>    if (Length[Index] == -1)</l>
+<c>        * Create_ single points for arrows with identical start and end point</c>
+<l>        gen_contour_polygon_xld (TempArrow, Row1[Index], Column1[Index])</l>
+<l>    else</l>
+<c>        * Create arrow contour</c>
+<l>        gen_contour_polygon_xld (TempArrow, [Row1[Index],Row2[Index],RowP1[Index],Row2[Index],RowP2[Index],Row2[Index]], [Column1[Index],Column2[Index],ColP1[Index],Column2[Index],ColP2[Index],Column2[Index]])</l>
+<l>    endif</l>
+<l>    concat_obj (Arrow, TempArrow, Arrow)</l>
+<l>endfor</l>
+<l>return ()</l>
+</body>
+<docu id="gen_arrow_contour_xld">
+<abstract lang="en_US">This procedure creates arrow shaped XLD contours, which point from the coordinates (Row1, Column1) to the coordinates (Row2, Coordinates2). The shape of the arrow head can be specified with the parameters HeadLength and HeadWidth (in pixels).
+
+If starting and end point are identical, a contour consisting of a single point is returned.
+
+The input tuples Row1, Column1, Row2, and Column2 have to be of the same length. HeadLength and HeadWidth either have to be of the same length as Row1, Column1, Row2, and Column2 or have to be a single element. If one of the above restrictions is violated, an error will occur.
+</abstract>
+<alternatives>
+<item>disp_arrow</item>
+<item>gen_contour_polygon_xld</item>
+</alternatives>
+<chapters lang="de_DE">
+<item>XLD</item>
+<item>Generierung</item>
+</chapters>
+<chapters lang="en_US">
+<item>XLD</item>
+<item>Creation</item>
+</chapters>
+<example lang="en_US">StartPointRows:=[100,100]
+StartPointColumns:=[100,100]
+EndPointRows:=[200,50]
+EndPointColumns:=[200,150]
+dev_set_colored (3)
+gen_arrow_contour_xld (Arrow, StartPointRows, StartPointColumns, EndPointRows, EndPointColumns, [10,20], [20,10])
+</example>
+<keywords lang="de_DE">
+<item>XLD-Konturen erzeugen</item>
+<item>XLD-Kontur eines Pfeils erzeugen</item>
+</keywords>
+<keywords lang="en_US">
+<item>create XLD contours</item>
+<item>create XLD contour of arrow</item>
+</keywords>
+<library lang="de_DE">MVTec Standard Procedures</library>
+<library lang="en_US">MVTec Standard Procedures</library>
+<see_also>
+<item>gen_contour_nurbs_xld</item>
+</see_also>
+<short lang="de_DE">Creates an arrow shaped XLD contour.</short>
+<short lang="en_US">Creates an arrow shaped XLD contour.</short>
+<successor>
+<item>dev_display</item>
+<item>disp_obj</item>
+</successor>
+<parameters>
+<parameter id="Arrow">
+<description lang="en_US">The generated xld</description>
+<multivalue>optional</multivalue>
+<sem_type>xld_cont</sem_type>
+</parameter>
+<parameter id="Column1">
+<default_type>integer</default_type>
+<default_value>100</default_value>
+<description lang="en_US">The column coordinate of the starting point</description>
+<mixed_type>optional</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>point.x</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Column2">
+<default_type>integer</default_type>
+<default_value>200</default_value>
+<description lang="en_US">The column coordinate of the end point</description>
+<mixed_type>optional</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>point.x</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="HeadLength">
+<default_type>integer</default_type>
+<default_value>5</default_value>
+<description lang="en_US">The length of the arrow head in pixels</description>
+<mixed_type>optional</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+</type_list>
+<values>
+<item>[2,3,5,10,20]</item>
+</values>
+</parameter>
+<parameter id="HeadWidth">
+<default_type>integer</default_type>
+<default_value>5</default_value>
+<description lang="en_US">The width of the arrow head in pixels</description>
+<mixed_type>optional</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>number</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+</type_list>
+<values>
+<item>[2,3,5,10,20]</item>
+</values>
+</parameter>
+<parameter id="Row1">
+<default_type>integer</default_type>
+<default_value>100</default_value>
+<description lang="en_US">The row coordinate of the starting point</description>
+<mixed_type>optional</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>point.y</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+</type_list>
+</parameter>
+<parameter id="Row2">
+<default_type>integer</default_type>
+<default_value>200</default_value>
+<description lang="en_US">The row coordinate of the end point</description>
+<mixed_type>optional</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>point.y</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="dlt_attach_region_proposal">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+</io>
+<oo>
+<par name="RegionOut" base_type="iconic" dimension="0"/>
+</oo>
+<ic>
+<par name="WindowHandleDrawing" base_type="ctrl" dimension="0"/>
+<par name="DrawID" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Exception" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<l>attach_drawing_object_to_window (WindowHandleDrawing, DrawID)</l>
+<l>Button := 0</l>
+<l>while (Button != 4)</l>
+<l>    try</l>
+<c>        * Check the mouse position and button</c>
+<l>        get_mposition (WindowHandleDrawing, Row, Column, Button)</l>
+<l>    catch (Exception)</l>
+<c>        * Keep waiting until mouse button is</c>
+<c>        * positioned in the window</c>
+<l>    endtry</l>
+<l>endwhile</l>
+<l>get_drawing_object_iconic (RegionOut, DrawID)</l>
+<l>try</l>
+<l>    gen_region_contour_xld (RegionOut, RegionOut, 'filled')</l>
+<l>catch (Exception)</l>
+<l>endtry</l>
+<c>* </c>
+<l>return ()</l>
+</body>
+<docu id="dlt_attach_region_proposal">
+<parameters>
+<parameter id="DrawID"/>
+<parameter id="Exception"/>
+<parameter id="Image"/>
+<parameter id="RegionOut"/>
+<parameter id="WindowHandleDrawing"/>
+</parameters>
+</docu>
+</procedure>
+</hdevelop>

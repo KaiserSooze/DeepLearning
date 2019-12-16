@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.2" halcon_version="18.11.0.1">
+<procedure name="main">
+<interface/>
+<body>
+<c>* </c>
+<c>* Deep learning segmentation workflow:</c>
+<c>* </c>
+<c>* This example shows the overall workflow for </c>
+<c>* deep learning segmentation.</c>
+<c>* PLEASE NOTE:</c>
+<c>* - Default parameters are used as much as possible.</c>
+<c>*   Therefore, the results differ from those in the standard </c>
+<c>*   example series.</c>
+<c>* - For more details on the steps and optimization of parameters,</c>
+<c>*   please refer to the respective examples from the series,</c>
+<c>*   e.g. segment_pill_defects_deep_learning_1_preprocess.hdev etc.</c>
+<c>* </c>
+<l>dev_close_window ()</l>
+<l>dev_update_off ()</l>
+<l>set_system ('seed_rand', 42)</l>
+<c>* </c>
+<c>* ***   0) SET INPUT/OUTPUT PATHS AND DATASET PARAMETERS   ***</c>
+<c>* </c>
+<l>ImageDir := 'pill'</l>
+<l>SegmentationDir := 'labels/pill'</l>
+<c>* </c>
+<l>OutputDir := 'segment_pill_defects_data'</l>
+<c>* </c>
+<l>ClassNames := ['good','contamination','crack']</l>
+<l>ClassIDs := [0,1,2]</l>
+<c>* </c>
+<c>* ***   1.) PREPARE   ***</c>
+<c>* </c>
+<c>* Read and prepare the DLDataset.</c>
+<l>read_dl_dataset_segmentation (ImageDir, SegmentationDir, ClassNames, ClassIDs, [], [], [], DLDataset)</l>
+<l>split_dl_dataset (DLDataset, 60, 20, [])</l>
+<l>create_dict (PreprocessSettings)</l>
+<c>* Here, existing preprocessed data will be overwritten.</c>
+<l>set_dict_tuple (PreprocessSettings, 'overwrite_files', true)</l>
+<l>create_dl_preprocess_param ('segmentation', 400, 400, 3, -127, 128, 'false', 'full_domain', [], [], [], [], DLPreprocessParam)</l>
+<l>preprocess_dl_dataset (DLDataset, OutputDir, DLPreprocessParam, PreprocessSettings, DLDatasetFileName)</l>
+<c>* </c>
+<c>* Inspect 10 randomly selected preprocessed DLSamples visually.</c>
+<l>create_dict (WindowDict)</l>
+<l>get_dict_tuple (DLDataset, 'samples', DatasetSamples)</l>
+<l>find_dl_samples (DatasetSamples, 'split', 'train', 'match', TrainSampleIndices)</l>
+<l>for Index := 0 to 9 by 1</l>
+<l>    SampleIndex := TrainSampleIndices[round(rand(1) * (|TrainSampleIndices| - 1))]</l>
+<l>    read_dl_samples (DLDataset, SampleIndex, DLSample)</l>
+<l>    dev_display_dl_data (DLSample, [], DLDataset, ['segmentation_image_ground_truth','segmentation_weight_map'], [], WindowDict)</l>
+<l>    stop ()</l>
+<l>endfor</l>
+<l>dev_display_dl_data_close_windows (WindowDict)</l>
+<c>* </c>
+<c>* ***   2.) TRAIN   ***</c>
+<c>* </c>
+<c>* Read a pretrained model and adapt its parameters </c>
+<c>* according to the dataset.</c>
+<l>read_dl_model ('pretrained_dl_segmentation_compact.hdl', DLModelHandle)</l>
+<l>set_dl_model_param_based_on_preprocessing (DLModelHandle, DLPreprocessParam, ClassIDs)</l>
+<c>* Modify training related model parameters.</c>
+<l>set_dl_model_param_max_gpu_batch_size (DLModelHandle, 50)</l>
+<l>set_dl_model_param (DLModelHandle, 'learning_rate', 0.0001)</l>
+<l>set_dl_model_param (DLModelHandle, 'runtime_init', 'immediately')</l>
+<c>* </c>
+<c>* Here, we run a short training of 10 epochs.</c>
+<c>* For better model performance increase the number of epochs</c>
+<c>* and train as long as your compute budget allows, </c>
+<c>* e.g. for 100, 1000 or 3000 epochs.</c>
+<l>create_dl_train_param (DLModelHandle, 10, 1, 'true', 42, [], [], TrainParam)</l>
+<l>train_dl_model (DLDataset, DLModelHandle, TrainParam, 0, TrainResults, TrainInfos, EvaluationInfos)</l>
+<c>*</c>
+<c>* Read the best model, which is written to file by train_dl_model.</c>
+<l>read_dl_model ('model_best.hdl', DLModelHandle)</l>
+<l>dev_disp_text ('Press F5 to continue', 'window', 'bottom', 'left', 'black', [], [])</l>
+<l>stop ()</l>
+<c>* </c>
+<l>dev_close_window ()</l>
+<l>dev_close_window ()</l>
+<c>* </c>
+<c>* ***   3.) EVALUATE   ***</c>
+<c>* </c>
+<l>create_dict (GenParamEval)</l>
+<l>set_dict_tuple (GenParamEval, 'show_progress', true)</l>
+<l>set_dict_tuple (GenParamEval, 'measures', ['mean_iou','pixel_accuracy','class_pixel_accuracy','pixel_confusion_matrix'])</l>
+<l>evaluate_dl_model (DLDataset, DLModelHandle, 'split', 'test', GenParamEval, EvaluationResult, EvalParams)</l>
+<c>* </c>
+<l>create_dict (GenParamEvalDisplay)</l>
+<l>set_dict_tuple (GenParamEvalDisplay, 'display_mode', ['measures','absolute_confusion_matrix'])</l>
+<l>dev_display_segmentation_evaluation (EvaluationResult, EvalParams, GenParamEvalDisplay, WindowDict)</l>
+<l>stop ()</l>
+<c>* </c>
+<l>dev_display_dl_data_close_windows (WindowDict)</l>
+<c>* </c>
+<c>* ***   4.) INFER   ***</c>
+<c>* </c>
+<c>* To demonstrate the inference steps, we apply the</c>
+<c>* trained model to some randomly chosen example images.</c>
+<l>list_image_files (ImageDir, 'default', 'recursive', ImageFiles)</l>
+<l>tuple_shuffle (ImageFiles, ImageFilesShuffled)</l>
+<c>* </c>
+<l>set_dl_model_param (DLModelHandle, 'batch_size', 1)</l>
+<c>* </c>
+<l>for IndexInference := 0 to 9 by 1</l>
+<l>    read_image (Image, ImageFilesShuffled[IndexInference])</l>
+<l>    gen_dl_samples_from_images (Image, DLSample)</l>
+<l>    preprocess_dl_samples (DLSample, DLPreprocessParam)</l>
+<l>    apply_dl_model (DLModelHandle, DLSample, [], DLResult)</l>
+<c>    * </c>
+<l>    dev_display_dl_data (DLSample, DLResult, DLDataset, ['segmentation_image_result','segmentation_confidence_map'], [], WindowDict)</l>
+<l>    stop ()</l>
+<l>endfor</l>
+<l>dev_display_dl_data_close_windows (WindowDict)</l>
+<c>* </c>
+<c>* </c>
+<l>clean_up_output (OutputDir)</l>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+<procedure name="clean_up_output">
+<interface>
+<ic>
+<par name="OutputDir" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This local example procedure cleans up the output of the example.</c>
+<c>* </c>
+<c>* Display a warning.</c>
+<l>dev_open_window (0, 0, 600, 300, 'black', WindowHandle)</l>
+<l>set_display_font (WindowHandle, 16, 'mono', 'true', 'false')</l>
+<l>WarningCleanup := ['Congratulations, you have finished the example.','','Unless you would like to use the output data / model,','press F5 to clean up.']</l>
+<l>dev_disp_text (WarningCleanup, 'window', 'center', 'center', ['black','black','coral','coral','coral'], [], [])</l>
+<c>* </c>
+<l>stop ()</l>
+<l>dev_close_window ()</l>
+<c>* </c>
+<c>* Delete all outputs of the example.</c>
+<l>remove_dir_recursively (OutputDir)</l>
+<l>delete_file ('model_best.hdl')</l>
+<l>delete_file ('model_best_info.hdict')</l>
+<l>return ()</l>
+</body>
+<docu id="clean_up_output">
+<short lang="en_US">Local example procedure for cleaning up files written by example script.</short>
+<parameters>
+<parameter id="OutputDir">
+<default_type>string</default_type>
+<description lang="en_US">Output directory, where preprocessed data are written to.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename.dir</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+</hdevelop>
+

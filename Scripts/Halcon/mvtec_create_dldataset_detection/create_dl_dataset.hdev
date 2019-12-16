@@ -1,0 +1,1206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.2" halcon_version="18.11.0.0">
+<procedure name="main">
+<interface/>
+<body>
+<c>*</c>
+<c>* Object detection:</c>
+<c>* This script demonstrates how to create a DLDataset dictionary </c>
+<c>* for object detection from already labeled data.</c>
+<c>*</c>
+<c>* Initialization</c>
+<l>dev_close_window ()</l>
+<l>dev_update_off ()</l>
+<l>set_system ('clip_region', 'false')</l>
+<c>* </c>
+<c>* ***   Provide the the general dataset information.   ***</c>
+<c>* </c>
+<c>* Set base path common for all images.</c>
+<l>ImageDir := 'data/images/'</l>
+<c>* Set class names and corresponding class ids.</c>
+<l>ClassNames := ['Omega-3', 'KMW', 'Stomach tablet', 'Ginko', 'Ginseng',\
+               'Glucosamin', 'Cognivia', 'Capsularum I', 'Iron tablet', 'Vitamin-B']</l>
+<l>ClassIDs := [1:|ClassNames|]</l>
+<c>*</c>
+<c>* ***   Provide all variables for ground truth labels.   ***</c>
+<c>*     --&gt; This part might need to be changed depending on </c>
+<c>*         the available ground truth.</c>
+<c>*</c>
+<c>* For this example, for each image the following is stored </c>
+<c>* in the folder below:</c>
+<c>* - label regions (rectangle1) stored in .hobj files</c>
+<c>* - corresponding label class_id stored in .tup files</c>
+<l>LabelDir := 'data/labels/'</l>
+<c>*</c>
+<c>* ***   Generate the DLDataset   *** </c>
+<c>* </c>
+<l>create_dict (DLDataset)</l>
+<c>*</c>
+<c>* Set the keys containing general information about the dataset.</c>
+<l>get_absolute_path_to_dir (ImageDir, ImageDirAbs)</l>
+<l>set_dict_tuple (DLDataset, 'image_dir', ImageDirAbs)</l>
+<l>set_dict_tuple (DLDataset, 'class_names', ClassNames)</l>
+<l>set_dict_tuple (DLDataset, 'class_ids', ClassIDs)</l>
+<c>*</c>
+<c>* Create a 'Sample' dict for each image,</c>
+<c>* storing all required meta information of this image.</c>
+<l>list_image_files (ImageDirAbs, 'default', 'recursive', ImageFileNames)</l>
+<l>Samples := gen_tuple_const(|ImageFileNames|, -1)</l>
+<l>for IndexFile := 0 to |ImageFileNames| - 1 by 1</l>
+<c>    *</c>
+<c>    * **  Collect all necessary information for each image  **</c>
+<c>    *   --&gt; Modify this part, depending on the format of </c>
+<c>    *       your ground truth data.</c>
+<c>    *</c>
+<c>    * Get 'image_file_name' relative to the 'image_dir'.</c>
+<l>    ImageFileName := regexp_replace (ImageFileNames[IndexFile], ImageDirAbs, '')</l>
+<c>    *</c>
+<c>    * Here, we use the for-loop index as a unique 'image_id'.</c>
+<l>    ImageID := IndexFile</l>
+<c>    *</c>
+<c>    * Obtain 'bbox_label_ids' from the respective .tup file.</c>
+<l>    parse_filename (ImageFileName, BaseName, Extension, Directory)</l>
+<l>    read_tuple (LabelDir + Directory + BaseName + '.tup', BboxLabelIDs)</l>
+<c>    *</c>
+<c>    * Generate the bounding box coordinates from stored regions:</c>
+<c>    * 'bbox_col1', 'bbox_row1', 'bbox_col2', 'bbox_row2'</c>
+<l>    read_object (BboxRegions, LabelDir + Directory + BaseName + '.hobj')</l>
+<l>    smallest_rectangle1 (BboxRegions, BboxRow1, BboxColumn1, BboxRow2, BboxColumn2)</l>
+<c>    *</c>
+<c>    * **  Create the sample and set all required information gathered above.  **</c>
+<c>    *</c>
+<l>    create_dict (Sample)</l>
+<l>    set_dict_tuple (Sample, 'image_file_name', ImageFileName)</l>
+<l>    set_dict_tuple (Sample, 'image_id', ImageID)</l>
+<l>    set_dict_tuple (Sample, 'bbox_label_id', BboxLabelIDs)</l>
+<l>    set_dict_tuple (Sample, 'bbox_row1', BboxRow1)</l>
+<l>    set_dict_tuple (Sample, 'bbox_col1', BboxColumn1)</l>
+<l>    set_dict_tuple (Sample, 'bbox_row2', BboxRow2)</l>
+<l>    set_dict_tuple (Sample, 'bbox_col2', BboxColumn2)</l>
+<c>    * </c>
+<l>    Samples[IndexFile] := Sample</l>
+<c>    *</c>
+<l>endfor</l>
+<l>set_dict_tuple (DLDataset, 'samples', Samples)</l>
+<c>*</c>
+<c>* Run some consistency checks on the created DLDataset.</c>
+<l>check_dl_dataset (DLDataset, 'detection')</l>
+<c>*</c>
+<c>* Write the DLDataset dictionary to file.</c>
+<l>DLDatasetFileName := 'dl_dataset_raw'</l>
+<l>write_dict (DLDataset, DLDatasetFileName, [], [])</l>
+<c>*</c>
+<c>* ***   Inspect the DLDataset   *** </c>
+<c>*</c>
+<l>dev_inspect_ctrl (DLDataset)</l>
+<l>stop()</l>
+<l>dev_close_inspect_ctrl (DLDataset)</l>
+<c>*</c>
+<c>* Inspect the labeled data in DLDataset visually </c>
+<c>* to double-check DLDataset.</c>
+<l>create_dict (WindowHandleDict)</l>
+<l>for IndexSample := 0 to |Samples|-1 by 1</l>
+<l>    gen_dl_samples (DLDataset, IndexSample, 'off', [], DLSample)</l>
+<l>    dev_display_dl_data (DLSample, [], DLDataset, 'bbox_ground_truth',[],WindowHandleDict)</l>
+<l>    stop()</l>
+<l>endfor</l>
+<l>dev_display_dl_data_close_windows (WindowHandleDict)</l>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+<procedure name="get_absolute_path_to_dir">
+<interface>
+<ic>
+<par name="DirectoryPath" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="AbsolutePath" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the absolute path of a given directory.</c>
+<c>* </c>
+<c>* Get the absolute path.</c>
+<l>get_current_dir (Old)</l>
+<l>set_current_dir (DirectoryPath)</l>
+<l>get_current_dir (AbsolutePath)</l>
+<l>set_current_dir (Old)</l>
+<l>get_system ('operating_system', OS)</l>
+<c>*</c>
+<c>* Add the separator at the end.</c>
+<l>if (OS{0:2} == 'Win')</l>
+<l>    SEP := '\\'</l>
+<l>else</l>
+<l>    SEP := '/'</l>
+<l>endif</l>
+<l>AbsolutePath := AbsolutePath + SEP</l>
+<c>*</c>
+<c>* Replace '\\' by '/'.</c>
+<l>tuple_regexp_replace (AbsolutePath, ['\\\\','replace_all'], '/', AbsolutePath)</l>
+<l>return ()</l>
+</body>
+<docu id="get_absolute_path_to_dir">
+<abstract lang="en_US">This procedure returns the absolute path AbsolutePath of a given directory DirectoryPath. Independent of the operating system, AbsolutePath uses '/'.</abstract>
+<short lang="en_US">Returns the absolute path of a given directory.</short>
+<parameters>
+<parameter id="AbsolutePath">
+<default_type>string</default_type>
+<description lang="en_US">Absolute path of DirectoryPath.</description>
+<mixed_type>false</mixed_type>
+<sem_type>filename.dir</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="DirectoryPath">
+<default_type>string</default_type>
+<description lang="en_US">Relative or absolute path to a directory.</description>
+<mixed_type>false</mixed_type>
+<sem_type>filename.dir</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="check_dl_data_sample_required_keys">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+<par name="DatasetType" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure checks that the keys set in the Sample dictionary </c>
+<c>* of DLDataset samples are correct.</c>
+<c>* </c>
+<c>* Set the required keys.</c>
+<c>* All datasets.</c>
+<l>KeysRequired := ['image_file_name', 'image_id']</l>
+<c>*</c>
+<l>if (DatasetType == 'detection')</l>
+<c>    * Detection.</c>
+<l>    KeysRequired := [KeysRequired, 'bbox_label_id', 'bbox_row1', 'bbox_col1', 'bbox_row2', 'bbox_col2']</l>
+<l>elseif (DatasetType == 'segmentation')</l>
+<c>    * Segmentation.</c>
+<l>    KeysRequired := [KeysRequired, 'segmentation_file_name']</l>
+<l>else</l>
+<l>    throw (['DatasetType unknown'])</l>
+<l>endif</l>
+<c>*</c>
+<c>* Check the existence of the required keys</c>
+<l>check_dict_key_exist (Sample, KeysRequired)</l>
+<l>return ()</l>
+</body>
+<docu id="check_dl_data_sample_required_keys">
+<short lang="en_US">Checks whether required keys  are present in Sample dictionary.</short>
+<parameters>
+<parameter id="DatasetType">
+<default_type>string</default_type>
+<default_value>'detection'</default_value>
+<description lang="en_US">Dataset type depending on the application the dataset has been labeled for.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'detection'</item>
+<item>'segmentation'</item>
+</values>
+</parameter>
+<parameter id="Sample">
+<default_type>integer</default_type>
+<description lang="en_US">Sample dictionary of a DLDataset type sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="check_dl_dataset_required_keys">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+<par name="DatasetType" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure checks that all required keys are present in DLDataset.</c>
+<c>* </c>
+<c>* Set the required keys.</c>
+<l>if (DatasetType == 'detection')</l>
+<l>    KeysRequired := ['image_dir', 'class_names', 'class_ids','samples']</l>
+<l>elseif (DatasetType == 'segmentation')</l>
+<l>    KeysRequired := ['image_dir', 'class_names', 'class_ids','segmentation_dir','samples']</l>
+<l>else</l>
+<l>    throw (['DatasetType unknown'])</l>
+<l>endif</l>
+<c>*</c>
+<c>* Check that all required keys are available.</c>
+<l>check_dict_key_exist (DLDataset, KeysRequired)</l>
+<l>return ()</l>
+</body>
+<docu id="check_dl_dataset_required_keys">
+<short lang="en_US">Checks the completeness of keys of a DLDataset.</short>
+<parameters>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="DatasetType">
+<default_type>string</default_type>
+<default_value>'detection'</default_value>
+<description lang="en_US">Type of the dataset.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'detection'</item>
+<item>'segmentation'</item>
+</values>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_dataset_samples">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Samples" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the Samples stored under key 'samples' of the dict DLDataset.</c>
+<c>*</c>
+<l>check_dict_key_exist (DLDataset, 'samples')</l>
+<l>get_dict_tuple (DLDataset, 'samples', Samples)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_dataset_samples">
+<short lang="en_US">Returns the Samples stored under key 'samples' in the DLDataset dictionary.</short>
+<parameters>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Samples">
+<default_type>integer</default_type>
+<description lang="en_US">Tuple of sample dictionaries, as stored under key 'samples' of the DLDataset.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_dataset_sample">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+<par name="SampleKey" base_type="ctrl" dimension="0"/>
+<par name="SampleKeyValue" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure gets the Sample dict of  from the DLDataset that is specified by the</c>
+<c>* SampleKey SampleKeyValue provided.</c>
+<c>*</c>
+<c>* Get the samples.</c>
+<l>get_dl_dataset_samples (DLDataset, Samples)</l>
+<c>*</c>
+<l>if (SampleKey == 'sample_index')</l>
+<c>    * If SampleKey is 'sample_index', return the Sample of the given Index SampleKeyValue.</c>
+<l>    Sample := Samples[SampleKeyValue]</l>
+<l>    return ()</l>
+<l>else</l>
+<c>    * Get the samples that match the key value pairs.</c>
+<l>    find_dl_samples (Samples, SampleKey, SampleKeyValue, 'match', SampleIndices)</l>
+<l>    if (|SampleIndices| &gt; 0 )</l>
+<l>        Sample := Samples [SampleIndices]</l>
+<l>    else</l>
+<l>        throw ('A sample for image ID ' + SampleKey + ' does not exist')</l>
+<l>    endif</l>
+<l>endif</l>
+<c>*</c>
+<l>return ()</l>
+</body>
+<docu id="get_dl_dataset_sample">
+<abstract lang="en_US">This procedure returned the Sample dictionary of from the DLDataset that is specified by the SampleKey and SampleKeyValue provided.</abstract>
+<short lang="en_US">Returns a Sample dictionary of DLDataset specified by SampleKey and SampleKeyValue.</short>
+<parameters>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Sample">
+<default_type>integer</default_type>
+<description lang="en_US">Tuple of sample dictionaries that fulfills SampleKey-SampleKeyValue pair. </description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="SampleKey">
+<default_type>string</default_type>
+<default_value>'sample_index'</default_value>
+<description lang="en_US">SampleKey used for the selection of the sample(s) Sample to be returned. Needs to be either a key of the Sample dictionaries or 'sample_index'.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>any</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'sample_index'</item>
+<item>'image_id'</item>
+<item>'image_file_name'</item>
+</values>
+</parameter>
+<parameter id="SampleKeyValue">
+<default_type>integer</default_type>
+<description lang="en_US">Wanted value of the SampleKey or index in case SampleKey is 'sample_index'.</description>
+<multivalue>false</multivalue>
+<sem_type>any</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="check_dict_key_exist">
+<interface>
+<ic>
+<par name="Dict" base_type="ctrl" dimension="0"/>
+<par name="Keys" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure checks the existence of required keys Keys.</c>
+<c>*</c>
+<l>get_dict_param (Dict, 'key_exists', Keys, KeyExists)</l>
+<l>for Idx := 0 to |Keys| -1 by 1</l>
+<l>    if (not KeyExists[Idx])</l>
+<l>        throw ('Missing key in DLDataset or Sample dict: ' + Keys[Idx])</l>
+<l>    endif</l>
+<l>endfor</l>
+<l>return ()</l>
+</body>
+<docu id="check_dict_key_exist">
+<short lang="en_US">Checks whether given keys exist.</short>
+<parameters>
+<parameter id="Dict">
+<default_type>integer</default_type>
+<description lang="en_US">Dictionary to be checked for Keys.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Keys">
+<default_type>string</default_type>
+<description lang="en_US">Keys that are required to exist in Dict. If they are not present in Dict an error is thrown.</description>
+<mixed_type>optional</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_dataset_classes">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="ClassNames" base_type="ctrl" dimension="0"/>
+<par name="ClassIDs" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the the class names and ids stored under </c>
+<c>* key 'class_names' and 'class_ids' of the dict DLDataset.</c>
+<c>*</c>
+<l>check_dict_key_exist (DLDataset, ['class_names','class_ids'])</l>
+<l>get_dict_tuple (DLDataset, 'class_names', ClassNames)</l>
+<l>get_dict_tuple (DLDataset, 'class_ids', ClassIDs)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_dataset_classes">
+<short lang="en_US">Returns 'class_ids' and 'class_names' of DLDataset.</short>
+<parameters>
+<parameter id="ClassIDs">
+<default_type>integer</default_type>
+<description lang="en_US">Tuple with the class ids present in the dataset, as stored under key 'class_ids' in the DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>integer</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="ClassNames">
+<default_type>string</default_type>
+<description lang="en_US">Tuple with the names of the classes present in the dataset, as stored under key 'class_names' in the DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_dataset_dlsample_dir">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="DLSampleDir" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the the DLSample directory stored under </c>
+<c>* key 'dlsample_dir' of the dict DLDataset.</c>
+<c>*</c>
+<l>check_dict_key_exist (DLDataset, 'dlsample_dir')</l>
+<l>get_dict_tuple (DLDataset, 'dlsample_dir', DLSampleDir)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_dataset_dlsample_dir">
+<abstract lang="en_US">This procedure returns the directory, where the DLSample dictionaries are stored, as stored under key 'dlsample_dir' in the DLDataset dictionary. This entry is normally created during preprocessing of the images.</abstract>
+<short lang="en_US">Returns the path stored under key 'dlsample_dir' in the DLDataset dictionary.</short>
+<parameters>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="DLSampleDir">
+<default_type>string</default_type>
+<description lang="en_US">Path of the directory, where the DLSample dicts are stored.</description>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_dataset_image_dir">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="ImageDir" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the image directory stored under </c>
+<c>* key 'image_dir' of the dict DLDataset.</c>
+<c>*</c>
+<l>check_dict_key_exist (DLDataset, 'image_dir')</l>
+<l>get_dict_tuple (DLDataset, 'image_dir', ImageDir)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_dataset_image_dir">
+<short lang="en_US">Returns the path stored under key 'image_dir' in the DLDataset dictionary.</short>
+<parameters>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="ImageDir">
+<default_type>string</default_type>
+<description lang="en_US">Path of the image directory stored under key 'image_dir' of DLDataset.</description>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_data_sample_image_filename">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="ImageFileName" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the the image file name of Sample stored under </c>
+<c>* key 'image_file_name' of the dict Sample.</c>
+<c>*</c>
+<l>check_dict_key_exist (Sample, 'image_file_name')</l>
+<l>get_dict_tuple (Sample, 'image_file_name', ImageFileName)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_data_sample_image_filename">
+<short lang="en_US">Returns the the image file name stored in Sample under key 'image_file_name'.</short>
+<parameters>
+<parameter id="ImageFileName">
+<default_type>string</default_type>
+<description lang="en_US">Image file names of Sample, relative to 'image_dir' of the corresponding DLDataset.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="Sample">
+<default_type>integer</default_type>
+<description lang="en_US">Sample dictionary of a DLDataset type sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_data_sample_image_id">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="ImageID" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the 'image_id' of Sample.</c>
+<c>*</c>
+<l>check_dict_key_exist (Sample, 'image_id')</l>
+<l>get_dict_tuple (Sample, 'image_id', ImageID)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_data_sample_image_id">
+<short lang="en_US">Returns the image id of the Sample dictionary stored under key 'image_id'.</short>
+<parameters>
+<parameter id="ImageID">
+<default_type>integer</default_type>
+<description lang="en_US">Image ID of the Sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>integer</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Sample">
+<default_type>integer</default_type>
+<description lang="en_US">Sample dictionary of a DLDataset type sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_data_sample_split">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Split" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the split of the Sample stored under </c>
+<c>* key 'split'.</c>
+<c>*</c>
+<l>check_dict_key_exist (Sample, 'split')</l>
+<l>get_dict_tuple (Sample, 'split', Split)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_data_sample_split">
+<short lang="en_US">Returns the split of the Sample stored under key 'split'.</short>
+<parameters>
+<parameter id="Sample">
+<default_type>integer</default_type>
+<description lang="en_US">Sample dictionary of a DLDataset type sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Split">
+<default_type>string</default_type>
+<description lang="en_US">Split the Sample has been assigned to as stored under key 'split'.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_data_sample_dlsample_filename">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="DLSampleFileName" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the file name of the DLSample dict </c>
+<c>* created of the Sample and stored under key 'dlsample_file_name'.</c>
+<c>*</c>
+<l>check_dict_key_exist (Sample, 'dlsample_file_name')</l>
+<l>get_dict_tuple (Sample, 'dlsample_file_name', DLSampleFileName)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_data_sample_dlsample_filename">
+<abstract lang="en_US">This procedure returns the file name of the DLSample dict created of the Sample and stored under key 'dlsample_file_name'. Normally, this entry is created during preprocessing.</abstract>
+<short lang="en_US">Returns the file name of the DLSample stored in the Sample dictionary under key 'dlsample_file_name'.</short>
+<parameters>
+<parameter id="DLSampleFileName">
+<default_type>string</default_type>
+<description lang="en_US">File name of the saved DLSample dict of Sample, relative to 'dlsample_dir' of the corresponding DLDataset.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>filename</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="Sample">
+<default_type>integer</default_type>
+<description lang="en_US">Sample dictionary of a DLDataset type sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_data_sample_bbox">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Labels" base_type="ctrl" dimension="0"/>
+<par name="Row1" base_type="ctrl" dimension="0"/>
+<par name="Col1" base_type="ctrl" dimension="0"/>
+<par name="Row2" base_type="ctrl" dimension="0"/>
+<par name="Col2" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the bounding box coordinates and labels of the Sample </c>
+<c>* stored under the keys 'bbox_label_id','bbox_row1', 'bbox_col1', 'bbox_row2', 'bbox_col2'.</c>
+<c>*</c>
+<l>BBoxKeys := ['bbox_label_id','bbox_row1', 'bbox_col1', 'bbox_row2', 'bbox_col2']</l>
+<l>check_dict_key_exist (Sample, BBoxKeys)</l>
+<l>get_dict_tuple (Sample, 'bbox_row1', Row1)</l>
+<l>get_dict_tuple (Sample, 'bbox_col1', Col1)</l>
+<l>get_dict_tuple (Sample, 'bbox_row2', Row2)</l>
+<l>get_dict_tuple (Sample, 'bbox_col2', Col2)</l>
+<l>get_dict_tuple (Sample, 'bbox_label_id', Labels)</l>
+<c>*</c>
+<l>return ()</l>
+</body>
+<docu id="get_dl_data_sample_bbox">
+<abstract lang="en_US">This procedure returns the bounding box coordinates and labels of the Sample 
+stored under the keys 'bbox_label_id','bbox_row1', 'bbox_col1', 'bbox_row2', 'bbox_col2'.
+</abstract>
+<short lang="en_US">Returns the bounding box attributes stored in the Sample dictionary.</short>
+<parameters>
+<parameter id="Col1">
+<default_type>integer</default_type>
+<description lang="en_US">Column1 coordinates stored under 'bbox_col1' in the sample dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>integer</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Col2">
+<default_type>integer</default_type>
+<description lang="en_US">Column2 coordinates stored under 'bbox_col2' in the sample dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>integer</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Labels">
+<default_type>integer</default_type>
+<description lang="en_US">Label ids stored under 'bbox_label_id' in the sample dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>integer</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Row1">
+<default_type>integer</default_type>
+<description lang="en_US">Row1 coordinates stored under 'bbox_row1' in the sample dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>integer</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Row2">
+<default_type>integer</default_type>
+<description lang="en_US">Row2 coordinates stored under 'bbox_row2' in the sample dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>integer</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="Sample">
+<default_type>integer</default_type>
+<description lang="en_US">Sample dictionary of a DLDataset type sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="check_dl_dataset">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+<par name="DatasetType" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<c>* This procedure checks the entire DLDataset.</c>
+<c>*</c>
+<c>*</c>
+<c>*** Check the general DLDataset keys.</c>
+<c>*</c>
+<c>* For checking paths, get the example image directory.</c>
+<l>get_system ('example_dir', HalconExampleDir)</l>
+<l>HalconImageDir := HalconExampleDir + '/images/'</l>
+<c>*</c>
+<c>* Check that all necessary keys are present.</c>
+<l>check_dl_dataset_required_keys (DLDataset, DatasetType)</l>
+<c>* Check the image directory.</c>
+<l>get_dl_dataset_image_dir (DLDataset, ImageDir)</l>
+<l>file_exists (ImageDir, FileExists) </l>
+<l>file_exists (HalconImageDir + ImageDir, FileExistsImageDir) </l>
+<l>if (ImageDir == '')</l>
+<l>    throw ('Image directory is empty.')</l>
+<l>elseif (|ImageDir| != 1)</l>
+<l>    throw ('Image directory has to be one path.')</l>
+<l>elseif (not (FileExists or FileExistsImageDir))</l>
+<l>    throw (['The \'image_dir\' path does not exist. '])</l>
+<l>endif</l>
+<c>* Check class_names and class_ids.</c>
+<l>get_dl_dataset_classes (DLDataset, ClassNames, ClassIDs)</l>
+<l>if (|ClassNames| != |ClassIDs|)</l>
+<l>    throw ('Number of elements in class_names and class_ids have to be identical.')</l>
+<l>endif</l>
+<c>*</c>
+<c>* Check optional entries in DLDataset.</c>
+<l>get_dict_param (DLDataset, 'keys', [], DLDatasetKeys)</l>
+<c>* Check 'dlsample_dir'.</c>
+<l>if (max(find(DLDatasetKeys,'dlsample_dir')) &gt; -1)</l>
+<l>    get_dl_dataset_dlsample_dir (DLDataset, DLSampleDir)</l>
+<l>    file_exists (DLSampleDir, FileExists) </l>
+<l>    if (DLSampleDir == '')</l>
+<l>        throw ('DLSample directory path is empty.')</l>
+<l>    elseif (|DLSampleDir| != 1)</l>
+<l>        throw ('DLSample directory path has to be one path.')</l>
+<l>    elseif (not FileExists)</l>
+<l>        throw (['The \'dlsample_dir\' path does not exist. '])</l>
+<l>    endif</l>
+<l>endif</l>
+<c>*</c>
+<c>* Check segmentation specific entry.</c>
+<l>if (DatasetType == 'segmentation')</l>
+<l>    get_dl_dataset_segmentation_dir (DLDataset, SegmentationDir)</l>
+<l>    file_exists (SegmentationDir, FileExists) </l>
+<l>    file_exists (HalconImageDir + SegmentationDir, FileExistsImageDir) </l>
+<l>    if (SegmentationDir == '')</l>
+<l>        throw ('Segmentation directory path is empty.')</l>
+<l>    elseif (|SegmentationDir| != 1)</l>
+<l>        throw ('Segmentation directory path has to be one path.')</l>
+<l>    elseif (not (FileExists or FileExistsImageDir))</l>
+<l>        throw (['The \'segmentation_dir\' path does not exist. '])</l>
+<l>    endif</l>
+<c>    *</c>
+<c>    * Check optional entries in DLDataset of type 'segmentation'</c>
+<l>    if (max(find(DLDatasetKeys,'class_weights')) &gt; -1)</l>
+<l>        get_dl_dataset_class_weights (DLDataset, ClassWeights)</l>
+<l>        if (|ClassWeights| != |ClassIDs|)</l>
+<l>            throw ('Number of elements in class_names, class_ids and class_weights have to be identical.')</l>
+<l>        endif</l>
+<l>    endif</l>
+<l>endif</l>
+<c>*</c>
+<c>*</c>
+<c>*** Check the Samples.</c>
+<c>*</c>
+<c>* Get the samples.</c>
+<l>get_dl_dataset_samples (DLDataset, Samples)</l>
+<c>* Collect entries that need to be checked over the entire dataset.</c>
+<l>ImageIDs := []</l>
+<l>Splits := []</l>
+<c>*</c>
+<c>* Loop over all samples for checking them.</c>
+<l>for Index := 0 to |Samples|-1 by 1</l>
+<c>    *</c>
+<c>    * Get a sample.</c>
+<l>    get_dl_dataset_sample (DLDataset,  'sample_index', Index, Sample)</l>
+<c>    * Check that the sample is a dict.</c>
+<l>    tuple_sem_type (Sample, SemType)</l>
+<l>    if (SemType != 'dict')</l>
+<l>        throw (['Sample ' + Index + ' is not a dict.'])</l>
+<l>    endif</l>
+<c>    * Check that all required keys have been set.</c>
+<l>    check_dl_data_sample_required_keys (Sample,DatasetType)</l>
+<c>    *</c>
+<c>    * Check all required entries.</c>
+<c>    * Check the existence of the image file.</c>
+<l>    get_dl_data_sample_image_filename (Sample, ImageFileName)</l>
+<l>    file_exists (ImageDir + ImageFileName, FileExists)</l>
+<l>    file_exists (HalconImageDir + ImageDir + '/' + ImageFileName, FileExistsImageDir) </l>
+<l>    if (ImageFileName == '')</l>
+<l>        throw ('Image file name is empty.')</l>
+<l>    elseif (|ImageFileName| != 1)</l>
+<l>        throw ('Image file name has to be one path.')</l>
+<l>    elseif (not (FileExists or FileExistsImageDir))</l>
+<l>        throw(['The image file of sample ' + Index + ' does not exist.'])</l>
+<l>    endif</l>
+<c>    * Collect ImageIds.</c>
+<l>    get_dl_data_sample_image_id (Sample, ImageID)</l>
+<l>    ImageIDs := [ImageIDs, ImageID]</l>
+<c>    *</c>
+<c>    * Check optional entires.</c>
+<l>    get_dict_param (Sample, 'keys', [], SampleKeys)</l>
+<c>    * Check and collect split values.</c>
+<l>    if (max(find(SampleKeys,'split')) &gt; -1)</l>
+<l>        get_dl_data_sample_split (Sample, Split)</l>
+<l>        if (|Split| != 1)</l>
+<l>            throw (['The split key should contain one string.'])</l>
+<l>        endif</l>
+<l>        Splits := [Splits, Split]</l>
+<l>    endif</l>
+<c>    * Check the dlsample_file_name</c>
+<l>    if (max(find(DLDatasetKeys,'dlsample_file_name')) &gt; -1)</l>
+<l>        get_dl_data_sample_dlsample_filename (Sample, DLSampleFileName)</l>
+<l>        file_exists (DLSampleDir + DLSampleFileName, FileExists) </l>
+<l>        if (DLSampleFileName == '')</l>
+<l>            throw ('DLSample file name is empty.')</l>
+<l>        elseif (|DLSampleFileName| != 1)</l>
+<l>            throw ('DLSample file name has to be one path.')</l>
+<l>        elseif (not FileExists)</l>
+<l>            throw (['The DLSample file of sample ' + Index + ' not exist. '])</l>
+<l>        endif</l>
+<l>    endif</l>
+<c>    *</c>
+<c>    * Check method specific entries.</c>
+<l>    if (DatasetType == 'detection')</l>
+<c>        *</c>
+<c>        * Check the bounding box coordinates and labels.</c>
+<c>        * Check the number of entries.</c>
+<l>        get_dl_data_sample_bbox (Sample, Labels, BRow1, BCol1, BRow2, BCol2)</l>
+<l>        if (|BRow1| + |BCol1| + |BRow2| + |BCol2| != |Labels|*4)</l>
+<l>            throw (['All bounding box entries have to have the same length.'])</l>
+<l>        endif</l>
+<c>        * Check the semantic types.</c>
+<l>        tuple_is_int (Labels, IsInt)</l>
+<l>        if ( not IsInt)</l>
+<l>            throw (['BboxLabels have to be numbers, referring to the respective class_ids value.'])</l>
+<l>        endif</l>
+<l>        tuple_is_number ([BRow1, BRow2, BCol1, BCol2],IsNumber)</l>
+<l>        if (min(IsNumber) != 1)</l>
+<l>            throw ('the provided bounding box coordinates have to be of type number')</l>
+<l>        endif</l>
+<c>        * Check that the labels are part of the ImageIds.</c>
+<l>        if (difference(uniq(Labels),ClassIDs) != [])</l>
+<l>            throw (['The bounding box label ids have to be part of class_ids.'])</l>
+<l>        endif</l>
+<l>    else</l>
+<c>        * In case of segmentation check the 'segmentation_file_name'.</c>
+<l>        get_dl_data_sample_segmentation_filename (Sample, SegmentationFileName)</l>
+<l>        file_exists (SegmentationDir + SegmentationFileName, FileExists)</l>
+<l>        file_exists (HalconImageDir + SegmentationDir + '/' + SegmentationFileName, FileExistsImageDir) </l>
+<l>        if (ImageFileName == '')</l>
+<l>            throw ('Segmentation image file name is empty.')</l>
+<l>        elseif (|ImageFileName| != 1)</l>
+<l>            throw ('Segmentation image file name has to be one path.')</l>
+<l>        elseif (not (FileExists or FileExistsImageDir))</l>
+<l>            throw(['The segmentation image file of sample ' + Index + ' does not exist.'])</l>
+<l>        endif</l>
+<l>    endif</l>
+<l>endfor</l>
+<c>* </c>
+<c>* Check that the ImageIDs are unique.</c>
+<l>if (sort(ImageIDs) != uniq(sort(ImageIDs)))</l>
+<l>    throw ( 'The image IDs need to be unique.')</l>
+<l>endif</l>
+<c>* Check that Splits is [] or has 2 or 3 unique strings.</c>
+<l>if (Splits != [] and (|uniq(sort(Splits))| == 1 or  |uniq(sort(Splits))| &gt;3))</l>
+<l>    throw (['There split should either contain 2 different strings (train and validation) or 3 (train, validation and test).'])</l>
+<l>endif</l>
+<c>* Check that there is one split string provided per sample.</c>
+<l>if (Splits != [] and (|Splits| != |Samples|))</l>
+<l>    throw (['It split keys are assigned to the samples, each sample should be assigned to one split.'])</l>
+<l>endif</l>
+<l>return ()</l>
+</body>
+<docu id="check_dl_dataset">
+<short lang="en_US">This procedure provides consistency checks of the created DLDataset dictionary.</short>
+<parameters>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dictionary to be checked.</description>
+<mixed_type>false</mixed_type>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="DatasetType">
+<default_type>string</default_type>
+<default_value>'detection'</default_value>
+<description lang="en_US">Type of the dataset.</description>
+<mixed_type>optional</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+<values>
+<item>'detection'</item>
+<item>'segmentation'</item>
+</values>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_dataset_segmentation_dir">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="SegmentationDir" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the segmentation directory stored under</c>
+<c>* key 'segmentation_dir' of the dict DLDataset.</c>
+<c></c>
+<l>check_dict_key_exist (DLDataset, 'segmentation_dir')</l>
+<l>get_dict_tuple (DLDataset, 'segmentation_dir', SegmentationDir)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_dataset_segmentation_dir">
+<short lang="en_US">Returns the path stored under key 'segmentation_dir' in the DLDataset dictionary.</short>
+<parameters>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="SegmentationDir">
+<default_type>string</default_type>
+<description lang="en_US">Common base path of all segmentation images stored under key 'segmentation_dir' of DLDataset. This key only exists for DLDatasets of type 'segmentation'.</description>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_dataset_class_weights">
+<interface>
+<ic>
+<par name="DLDataset" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="ClassWeights" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the the class names and ids stored under</c>
+<c>* key 'class_names' and 'class_ids' of the dict DLDataset.</c>
+<c></c>
+<l>check_dict_key_exist (DLDataset, 'class_weights')</l>
+<l>get_dict_tuple (DLDataset, 'class_weights', ClassWeights)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_dataset_class_weights">
+<short lang="en_US">Returns 'class_weights' of DLDataset.</short>
+<parameters>
+<parameter id="ClassWeights">
+<default_type>real</default_type>
+<description lang="en_US">Tuple with the weights of the classes present in the dataset, as stored under key 'class_weights' in the DLDataset dictionary. This key only exists for DLDatasets of type 'segmentation'.</description>
+<mixed_type>false</mixed_type>
+<multivalue>optional</multivalue>
+<sem_type>real</sem_type>
+<type_list>
+<item>integer</item>
+<item>real</item>
+<item>string</item>
+</type_list>
+</parameter>
+<parameter id="DLDataset">
+<default_type>integer</default_type>
+<description lang="en_US">DLDataset dictionary.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="get_dl_data_sample_segmentation_filename">
+<interface>
+<ic>
+<par name="Sample" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="SegmentationFileName" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>* This procedure returns the segmentation image file name of Sample stored under</c>
+<c>* key 'segmentation_file_name' of the dict Sample.</c>
+<c></c>
+<l>check_dict_key_exist (Sample, 'segmentation_file_name')</l>
+<l>get_dict_tuple (Sample, 'segmentation_file_name', SegmentationFileName)</l>
+<l>return ()</l>
+</body>
+<docu id="get_dl_data_sample_segmentation_filename">
+<short lang="en_US">Returns the the segmentation file name stored in Sample under key 'segmentation_file_name'.</short>
+<parameters>
+<parameter id="Sample">
+<default_type>integer</default_type>
+<description lang="en_US">Sample dictionary of a DLDataset type sample.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>dict</sem_type>
+<type_list>
+<item>integer</item>
+</type_list>
+</parameter>
+<parameter id="SegmentationFileName">
+<default_type>string</default_type>
+<description lang="en_US">Segmentation image file names of Sample, relative to 'segmentation_dir' of the corresponding DLDataset.</description>
+<mixed_type>false</mixed_type>
+<multivalue>false</multivalue>
+<sem_type>string</sem_type>
+<type_list>
+<item>string</item>
+</type_list>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+</hdevelop>
